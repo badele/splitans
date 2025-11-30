@@ -92,7 +92,7 @@ func ExportTokensToTable(tokens []tokenizer.Token, writer io.Writer) error {
 
 func truncate(s string, maxLen int) string {
 	s = fmt.Sprintf("%q", s)
-	
+
 	// Remove quote added by %q
 	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
 		s = s[1 : len(s)-1]

@@ -6,32 +6,21 @@ import (
 	"splitans/tokenizer"
 )
 
-type TokenStats struct {
-	TotalTokens      int
-	TokensByType     map[tokenizer.TokenType]int
-	SGRCodes         map[string]int
-	CSISequences     map[string]int
-	C0Codes          map[byte]int
-	C1Codes          map[string]int
-	TotalTextLength  int
-	UniqueSequences  int
-}
-
-func DisplayStats(tokens []tokenizer.Token) {
-	stats := calculateStats(tokens)
-
-	fmt.Println("=== Token Statistics ===")
-	fmt.Printf("\nTotal tokens: %d\n", stats.TotalTokens)
-	fmt.Printf("Total text length: %d characters\n", stats.TotalTextLength)
-
-	fmt.Println("\n--- Tokens by Type ---")
-
+func DisplayStats(tok *tokenizer.Tokenizer) {
 	type typeCount struct {
 		Type  tokenizer.TokenType
 		Count int
 	}
+
 	var typeCounts []typeCount
-	for t, count := range stats.TokensByType {
+
+	fmt.Println("=== Token Statistics ===\n")
+	fmt.Printf("  File size: %d bytes\n", tok.Stats.FileSize)
+	fmt.Printf("  Total tokens: %d\n", tok.Stats.TotalTokens)
+
+	fmt.Println("\n--- Tokens by Type")
+
+	for t, count := range tok.Stats.TokensByType {
 		typeCounts = append(typeCounts, typeCount{t, count})
 	}
 	sort.Slice(typeCounts, func(i, j int) bool {
@@ -39,29 +28,29 @@ func DisplayStats(tokens []tokenizer.Token) {
 	})
 
 	for _, tc := range typeCounts {
-		percentage := float64(tc.Count) / float64(stats.TotalTokens) * 100
-		fmt.Printf("  %-20s: %5d (%.1f%%)\n", tc.Type.String(), tc.Count, percentage)
+		percentage := float64(tc.Count) / float64(tok.Stats.TotalTokens) * 100
+		fmt.Printf("  %-30s:  %5d (%.1f%%)\n", tc.Type.String(), tc.Count, percentage)
 	}
 
-	if len(stats.SGRCodes) > 0 {
-		fmt.Println("\n--- Most Used SGR Codes ---")
-		displayTopN(stats.SGRCodes, 10)
+	if len(tok.Stats.SGRCodes) > 0 {
+		fmt.Println("\n--- Most Used SGR Codes")
+		displayTopN(tok.Stats.SGRCodes, 10)
 	}
 
-	if len(stats.CSISequences) > 0 {
-		fmt.Println("\n--- Most Used CSI Sequences ---")
-		displayTopN(stats.CSISequences, 10)
+	if len(tok.Stats.CSISequences) > 0 {
+		fmt.Println("\n--- Most Used CSI Sequences")
+		displayTopN(tok.Stats.CSISequences, 10)
 	}
 
-	if len(stats.C0Codes) > 0 {
-		fmt.Println("\n--- C0 Control Codes ---")
+	if len(tok.Stats.C0Codes) > 0 {
+		fmt.Println("\n--- C0 Control Codes")
 		type c0Count struct {
-			Code byte
-			Name string
+			Code  byte
+			Name  string
 			Count int
 		}
 		var c0Counts []c0Count
-		for code, count := range stats.C0Codes {
+		for code, count := range tok.Stats.C0Codes {
 			name := "Unknown"
 			if n, ok := tokenizer.C0Names[code]; ok {
 				name = n
@@ -80,52 +69,10 @@ func DisplayStats(tokens []tokenizer.Token) {
 		}
 	}
 
-	if len(stats.C1Codes) > 0 {
+	if len(tok.Stats.C1Codes) > 0 {
 		fmt.Println("\n--- C1 Control Codes ---")
-		displayTopN(stats.C1Codes, 10)
+		displayTopN(tok.Stats.C1Codes, 10)
 	}
-}
-
-func calculateStats(tokens []tokenizer.Token) TokenStats {
-	stats := TokenStats{
-		TokensByType: make(map[tokenizer.TokenType]int),
-		SGRCodes:     make(map[string]int),
-		CSISequences: make(map[string]int),
-		C0Codes:      make(map[byte]int),
-		C1Codes:      make(map[string]int),
-	}
-
-	stats.TotalTokens = len(tokens)
-
-	for _, token := range tokens {
-		stats.TokensByType[token.Type]++
-
-		// Specific statistics by token type
-		switch token.Type {
-		case tokenizer.TokenText:
-			stats.TotalTextLength += len(token.Value)
-
-		case tokenizer.TokenSGR:
-			// Count SGR parameters
-			for _, param := range token.Parameters {
-				stats.SGRCodes[param]++
-			}
-
-		case tokenizer.TokenCSI:
-			// Count CSI notations
-			if token.CSINotation != "" {
-				stats.CSISequences[token.CSINotation]++
-			}
-
-		case tokenizer.TokenC0:
-			stats.C0Codes[token.C0Code]++
-
-		case tokenizer.TokenC1:
-			stats.C1Codes[token.C1Code]++
-		}
-	}
-
-	return stats
 }
 
 func displayTopN(data map[string]int, n int) {
@@ -148,7 +95,6 @@ func displayTopN(data map[string]int, n int) {
 			break
 		}
 
-		// Try to get a human-readable name for SGR codes
 		displayName := e.Key
 		if code, err := parseInt(e.Key); err == nil {
 			if name, ok := tokenizer.SGRCodes[code]; ok {

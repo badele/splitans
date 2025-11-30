@@ -5,22 +5,49 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"splitans/exporter"
 	"splitans/tokenizer"
 )
+
+func ConcatenateTextAndSequence(left, right string, leftWidth int, separator string) string {
+	leftLines := strings.Split(left, "\n")
+	rightLines := strings.Split(right, "\n")
+
+	result := []string{}
+	numLines := len(leftLines)
+
+	// var result strings.Builder
+
+	for i := 0; i < numLines; i++ {
+		if i < len(leftLines) {
+			leftLine := leftLines[i]
+			rightLine := ""
+			if i < len(rightLines) {
+				rightLine = rightLines[i]
+			}
+			result = append(result, fmt.Sprintf("%s%s%s", leftLine, separator, rightLine))
+		}
+	}
+
+	return strings.Join(result, "\n")
+}
 
 func main() {
 	// Flags
 	jsonOutput := flag.Bool("json", false, "")
 	flag.BoolVar(jsonOutput, "j", false, "")
 
-	multifileOutput := flag.String("multifile", "", "")
-	flag.StringVar(multifileOutput, "m", "", "")
+	multiFormatMode := flag.Bool("multiformat", false, "")
+	flag.BoolVar(multiFormatMode, "m", false, "")
+
+	writePath := flag.String("write", "", "")
+	flag.StringVar(writePath, "w", "", "")
 
 	debugMode := flag.Bool("debug", false, "")
 	flag.BoolVar(debugMode, "d", false, "")
-	
+
 	statsMode := flag.Bool("stats", false, "")
 	flag.BoolVar(statsMode, "s", false, "")
 
@@ -40,8 +67,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "        Display tokens in JSON format\n")
 		fmt.Fprintf(os.Stderr, "  -s, --stats\n")
 		fmt.Fprintf(os.Stderr, "        Display usage statistics for characters and sequences\n")
-		fmt.Fprintf(os.Stderr, "  -m, --multifile <path>\n")
-		fmt.Fprintf(os.Stderr, "        Export to .ant and .anc files (specify base path)\n")
+		fmt.Fprintf(os.Stderr, "  -m, --multiformat\n")
+		fmt.Fprintf(os.Stderr, "        Export to stdout or .ant and .anc files (with -s param)\n")
+		fmt.Fprintf(os.Stderr, "  -w, --write\n")
+		fmt.Fprintf(os.Stderr, "        Write the multiformat to file .ant and .anc files (with -m param)\n")
 		fmt.Fprintf(os.Stderr, "  -d, --debug\n")
 		fmt.Fprintf(os.Stderr, "        Enable debug mode (displays cursor positions)\n")
 	}
@@ -89,19 +118,9 @@ func main() {
 	tok := tokenizer.NewTokenizer(data)
 	tokens := tok.Tokenize()
 
-	// Export to multiple files
-	if *multifileOutput != "" {
-		if err := exporter.ExportToMultifile(tokens, *multifileOutput); err != nil {
-			fmt.Fprintf(os.Stderr, "Error exporting to multifile: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("Files exported: %s.ant and %s.anc\n", *multifileOutput, *multifileOutput)
-		return
-	}
-
 	// Display statistics
 	if *statsMode {
-		exporter.DisplayStats(tokens)
+		exporter.DisplayStats(tok)
 		return
 	}
 
@@ -113,12 +132,12 @@ func main() {
 
 	// Display table
 	if *tableOutput {
-		if tok.PosFirstBadSequence > 0 {
+		if tok.Stats.PosFirstBadSequence > 0 {
 			fmt.Printf("=== Parsing file: %s ===\n\n", filename)
 		}
 
-		fmt.Printf("=== file size: %d bytes ===\n", tok.FileSize)
-		fmt.Printf("=== %% Parsed %f  ===\n", tok.ParsedPercent)
+		// fmt.Printf("=== file size: %d bytes ===\n", tok.FileSize)
+		fmt.Printf("=== %% Parsed %f  ===\n", tok.Stats.ParsedPercent)
 
 		if err := exporter.ExportTokensToTable(tokens, os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying table: %v\n", err)
@@ -127,9 +146,31 @@ func main() {
 		return
 	}
 
-	// Default: display plain text
-	if err := exporter.DisplayPlainText(tokens); err != nil {
+	plainText, err := exporter.GetPlainText(tokens)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error displaying plain text: %v\n", err)
 		os.Exit(1)
+	}
+
+	if *multiFormatMode {
+		sequenceText, err := exporter.GetPlainTextSequence(tokens)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error displaying sequence text: %v\n", err)
+			os.Exit(1)
+		}
+
+		if *writePath != "" {
+			if err := exporter.ExportToMultipleFile(*writePath, plainText, sequenceText); err != nil {
+				fmt.Fprintf(os.Stderr, "Error exporting to multifile: %v\n", err)
+				os.Exit(1)
+			}
+
+		} else {
+			combined := ConcatenateTextAndSequence(plainText, sequenceText, 80, " | ")
+			fmt.Println(combined)
+		}
+	} else {
+		fmt.Println(plainText)
+		return
 	}
 }

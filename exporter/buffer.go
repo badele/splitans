@@ -483,7 +483,7 @@ func (tb *TcellBuffer) GetPlainText() string {
 		}
 
 		if lineHasContent {
-			lineText = strings.TrimRight(lineText, " ")
+			// lineText = strings.TrimRight(lineText, " ")
 			builder.WriteString(lineText)
 			if y < tb.height-1 {
 				builder.WriteString("\n")
@@ -491,7 +491,8 @@ func (tb *TcellBuffer) GetPlainText() string {
 		}
 	}
 
-	return strings.TrimRight(builder.String(), "\n")
+	return builder.String()
+	// return strings.TrimRight(builder.String(), "\n")
 }
 
 func (tb *TcellBuffer) GetActualWidth() int {
@@ -609,4 +610,102 @@ func DisplayPlainText(tokens []tokenizer.Token) error {
 	fmt.Println(plainText)
 
 	return nil
+}
+
+// styleDiff compares two styles and returns only the changes
+func styleDiff(oldStyle, newStyle tcell.Style) string {
+	var changes []string
+
+	oldFg, oldBg, oldAttrs := oldStyle.Decompose()
+	newFg, newBg, newAttrs := newStyle.Decompose()
+
+	// Check if this is a complete reset
+	if newFg == tcell.ColorDefault && newBg == tcell.ColorDefault && newAttrs == tcell.AttrNone {
+		// Only return RESET if it's different from the old style
+		if oldFg != tcell.ColorDefault || oldBg != tcell.ColorDefault || oldAttrs != tcell.AttrNone {
+			return "RESET"
+		}
+		return "" // No change, already in default state
+	}
+
+	// Foreground color changed
+	if newFg != oldFg {
+		if newFg == tcell.ColorDefault {
+			changes = append(changes, "FGD")
+		} else {
+			changes = append(changes, fmt.Sprintf("FG%s", colorToString(newFg)))
+		}
+	}
+
+	// Background color changed
+	if newBg != oldBg {
+		if newBg == tcell.ColorDefault {
+			changes = append(changes, "BGD")
+		} else {
+			changes = append(changes, fmt.Sprintf("BG%s", colorToString(newBg)))
+		}
+	}
+
+	// Check attribute changes
+	type attrInfo struct {
+		mask tcell.AttrMask
+		name string
+	}
+
+	attrs := []attrInfo{
+		{tcell.AttrBold, "BD"},
+		{tcell.AttrDim, "DM"},
+		{tcell.AttrItalic, "IC"},
+		{tcell.AttrUnderline, "UE"},
+		{tcell.AttrBlink, "BK"},
+		{tcell.AttrReverse, "RE"},
+	}
+
+	for _, attr := range attrs {
+		oldHas := (oldAttrs & attr.mask) != 0
+		newHas := (newAttrs & attr.mask) != 0
+
+		if oldHas != newHas {
+			if newHas {
+				changes = append(changes, fmt.Sprintf("%s1", attr.name))
+			} else {
+				changes = append(changes, fmt.Sprintf("%s0", attr.name))
+			}
+		}
+	}
+
+	if len(changes) == 0 {
+		return "" // No changes
+	}
+
+	return strings.Join(changes, ", ")
+}
+
+// colorToString converts a tcell.Color to a readable string
+func colorToString(color tcell.Color) string {
+	colorNames := map[tcell.Color]string{
+		tcell.ColorBlack:   "BK",
+		tcell.ColorMaroon:  "MN",
+		tcell.ColorGreen:   "GN",
+		tcell.ColorOlive:   "OE",
+		tcell.ColorNavy:    "NY",
+		tcell.ColorPurple:  "PE",
+		tcell.ColorTeal:    "TL",
+		tcell.ColorSilver:  "SR",
+		tcell.ColorGray:    "GY",
+		tcell.ColorRed:     "RD",
+		tcell.ColorLime:    "LE",
+		tcell.ColorYellow:  "YW",
+		tcell.ColorBlue:    "BE",
+		tcell.ColorFuchsia: "FA",
+		tcell.ColorAqua:    "AA",
+		tcell.ColorWhite:   "WE",
+	}
+
+	if name, ok := colorNames[color]; ok {
+		return name
+	}
+
+	// For 256 colors or RGB, return the numeric value
+	return fmt.Sprintf("%d", color)
 }

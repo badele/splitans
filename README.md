@@ -71,7 +71,7 @@ done;
 echo "Success: $success/$total"
 ```
 
-#### Check Plain Text Content
+#### Check output content
 
 ```bash
 echo "" > /tmp/result.txt
@@ -81,7 +81,6 @@ for file in $(find . -name "*.ANS"); do
     printf "=%.0s" {1..80} >> /tmp/result.txt
     echo -e "\n== ${file}\n" >> /tmp/result.txt
     ./splitans "$file" >> /tmp/result.txt 2>/dev/null
-    # printf "=%.0s" {1..80} >> /tmp/result.txt
     echo -e >> /tmp/result.txt
 done
 ```

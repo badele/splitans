@@ -14,23 +14,43 @@ import (
 	"unicode/utf8"
 )
 
+type TokenStats struct {
+	TotalTokens         int               `json:"total_tokens"`
+	TokensByType        map[TokenType]int `json:"tokens_by_type"`
+	SGRCodes            map[string]int    `json:"sgr_codes"`
+	CSISequences        map[string]int    `json:"csi_sequences"`
+	C0Codes             map[byte]int      `json:"c0_codes"`
+	C1Codes             map[string]int    `json:"c1_codes"`
+	TotalTextLength     int               `json:"total_text_length"`
+	FileSize            int64             `json:"file_size"`
+	ParsedPercent       float64           `json:"parsed_percent"`
+	PosFirstBadSequence int64             `json:"pos_first_bad_sequence"`
+}
+
 type Tokenizer struct {
-	input               []byte
-	pos                 int
-	Tokens              []Token `json:"tokens"`
-	FileSize            int64   `json:"file_size"`
-	PosFirstBadSequence int64   `json:"pos_first_bad_sequence"`
-	ParsedPercent       float64 `json:"parsed_percent"`
+	input  []byte
+	pos    int
+	Tokens []Token    `json:"tokens"`
+	Stats  TokenStats `json:"stats"`
 }
 
 func NewTokenizer(input []byte) *Tokenizer {
-	return &Tokenizer{
-		input:               input,
-		pos:                 0,
-		Tokens:              make([]Token, 0),
+	stats := TokenStats{
+		TokensByType:        make(map[TokenType]int),
+		SGRCodes:            make(map[string]int),
+		CSISequences:        make(map[string]int),
+		C0Codes:             make(map[byte]int),
+		C1Codes:             make(map[string]int),
 		FileSize:            int64(len(input)),
-		PosFirstBadSequence: 0,
 		ParsedPercent:       0.0,
+		PosFirstBadSequence: 0,
+	}
+
+	return &Tokenizer{
+		input:  input,
+		pos:    0,
+		Tokens: make([]Token, 0),
+		Stats:  stats,
 	}
 }
 
@@ -40,12 +60,15 @@ func (t *Tokenizer) Tokenize() []Token {
 
 		// Verify if parsing was interrupted by bad CSI
 		if len(t.Tokens) > 0 && t.Tokens[len(t.Tokens)-1].Type == TokenCSIInterupted {
-			t.ParsedPercent = float64(t.PosFirstBadSequence) / float64(t.FileSize) * 100
+			t.Stats.ParsedPercent = float64(t.Stats.PosFirstBadSequence) / float64(t.Stats.FileSize) * 100
 			return t.Tokens
 		}
 	}
 
-	t.ParsedPercent = 100
+	t.Stats.ParsedPercent = 100
+
+	t.calculateStats()
+
 	return t.Tokens
 }
 
@@ -82,7 +105,7 @@ func (t *Tokenizer) parseC0(start int, code byte) {
 }
 
 func (t *Tokenizer) parseEscape(start int) {
-	t.pos++ 
+	t.pos++
 
 	if t.pos >= len(t.input) {
 		t.Tokens = append(t.Tokens, Token{
@@ -153,7 +176,7 @@ func (t *Tokenizer) parseCSI(start int) {
 		token.Type = TokenCSIInterupted
 		token.CSINotation = fmt.Sprintf("CSI interrupted by C0 control (0x%02X)", final)
 		t.Tokens = append(t.Tokens, token)
-		t.PosFirstBadSequence = int64(t.pos)
+		t.Stats.PosFirstBadSequence = int64(t.pos)
 		return
 	}
 
@@ -371,6 +394,35 @@ func (t *Tokenizer) parseText(start int) {
 			Raw:   text,
 			Value: text,
 		})
+	}
+}
+
+func (t *Tokenizer) calculateStats() {
+	t.Stats.TotalTokens = len(t.Tokens)
+
+	for _, token := range t.Tokens {
+		t.Stats.TokensByType[token.Type]++
+
+		switch token.Type {
+		case TokenText:
+			t.Stats.TotalTextLength += len(token.Value)
+
+		case TokenSGR:
+			for _, param := range token.Parameters {
+				t.Stats.SGRCodes[param]++
+			}
+
+		case TokenCSI:
+			if token.CSINotation != "" {
+				t.Stats.CSISequences[token.CSINotation]++
+			}
+
+		case TokenC0:
+			t.Stats.C0Codes[token.C0Code]++
+
+		case TokenC1:
+			t.Stats.C1Codes[token.C1Code]++
+		}
 	}
 }
 

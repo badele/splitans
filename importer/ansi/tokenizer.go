@@ -1,4 +1,4 @@
-package tokenizer
+package ansi
 
 // Sources :
 // - https://wezterm.org/escape-sequences.html#graphic-rendition-sgr
@@ -12,31 +12,20 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-)
 
-type TokenStats struct {
-	TotalTokens         int               `json:"total_tokens"`
-	TokensByType        map[TokenType]int `json:"tokens_by_type"`
-	SGRCodes            map[string]int    `json:"sgr_codes"`
-	CSISequences        map[string]int    `json:"csi_sequences"`
-	C0Codes             map[byte]int      `json:"c0_codes"`
-	C1Codes             map[string]int    `json:"c1_codes"`
-	TotalTextLength     int               `json:"total_text_length"`
-	FileSize            int64             `json:"file_size"`
-	ParsedPercent       float64           `json:"parsed_percent"`
-	PosFirstBadSequence int64             `json:"pos_first_bad_sequence"`
-}
+	"splitans/types"
+)
 
 type Tokenizer struct {
 	input  []byte
 	pos    int
-	Tokens []Token    `json:"tokens"`
-	Stats  TokenStats `json:"stats"`
+	Tokens []types.Token    `json:"tokens"`
+	Stats  types.TokenStats `json:"stats"`
 }
 
-func NewTokenizer(input []byte) *Tokenizer {
-	stats := TokenStats{
-		TokensByType:        make(map[TokenType]int),
+func NewANSITokenizer(input []byte) *Tokenizer {
+	stats := types.TokenStats{
+		TokensByType:        make(map[types.TokenType]int),
 		SGRCodes:            make(map[string]int),
 		CSISequences:        make(map[string]int),
 		C0Codes:             make(map[byte]int),
@@ -49,17 +38,17 @@ func NewTokenizer(input []byte) *Tokenizer {
 	return &Tokenizer{
 		input:  input,
 		pos:    0,
-		Tokens: make([]Token, 0),
+		Tokens: make([]types.Token, 0),
 		Stats:  stats,
 	}
 }
 
-func (t *Tokenizer) Tokenize() []Token {
+func (t *Tokenizer) Tokenize() []types.Token {
 	for t.pos < len(t.input) {
 		t.nextToken()
 
 		// Verify if parsing was interrupted by bad CSI
-		if len(t.Tokens) > 0 && t.Tokens[len(t.Tokens)-1].Type == TokenCSIInterupted {
+		if len(t.Tokens) > 0 && t.Tokens[len(t.Tokens)-1].Type == types.TokenCSIInterupted {
 			t.Stats.ParsedPercent = float64(t.Stats.PosFirstBadSequence) / float64(t.Stats.FileSize) * 100
 			return t.Tokens
 		}
@@ -94,8 +83,8 @@ func (t *Tokenizer) nextToken() {
 }
 
 func (t *Tokenizer) parseC0(start int, code byte) {
-	token := Token{
-		Type:   TokenC0,
+	token := types.Token{
+		Type:   types.TokenC0,
 		Pos:    start,
 		Raw:    string(code),
 		C0Code: code,
@@ -108,8 +97,8 @@ func (t *Tokenizer) parseEscape(start int) {
 	t.pos++
 
 	if t.pos >= len(t.input) {
-		t.Tokens = append(t.Tokens, Token{
-			Type: TokenEscape,
+		t.Tokens = append(t.Tokens, types.Token{
+			Type: types.TokenEscape,
 			Pos:  start,
 			Raw:  string(t.input[start:t.pos]),
 		})
@@ -129,15 +118,15 @@ func (t *Tokenizer) parseEscape(start int) {
 		case "OSC":
 			t.parseOSC(start)
 		case "ST":
-			t.Tokens = append(t.Tokens, Token{
-				Type:   TokenC1,
+			t.Tokens = append(t.Tokens, types.Token{
+				Type:   types.TokenC1,
 				Pos:    start,
 				Raw:    string(t.input[start:t.pos]),
 				C1Code: name,
 			})
 		default:
-			t.Tokens = append(t.Tokens, Token{
-				Type:   TokenC1,
+			t.Tokens = append(t.Tokens, types.Token{
+				Type:   types.TokenC1,
 				Pos:    start,
 				Raw:    string(t.input[start:t.pos]),
 				C1Code: name,
@@ -153,8 +142,8 @@ func (t *Tokenizer) parseCSI(start int) {
 	params := t.collectParams()
 
 	if t.pos >= len(t.input) {
-		t.Tokens = append(t.Tokens, Token{
-			Type: TokenCSI,
+		t.Tokens = append(t.Tokens, types.Token{
+			Type: types.TokenCSI,
 			Pos:  start,
 			Raw:  string(t.input[start:t.pos]),
 		})
@@ -164,8 +153,8 @@ func (t *Tokenizer) parseCSI(start int) {
 	final := t.input[t.pos]
 	t.pos++
 
-	token := Token{
-		Type:       TokenCSI,
+	token := types.Token{
+		Type:       types.TokenCSI,
 		Pos:        start,
 		Raw:        string(t.input[start:t.pos]),
 		Parameters: params,
@@ -173,7 +162,7 @@ func (t *Tokenizer) parseCSI(start int) {
 
 	// if final is C0 control character, the sequence is invalid/interrupted
 	if final < 0x20 {
-		token.Type = TokenCSIInterupted
+		token.Type = types.TokenCSIInterupted
 		token.CSINotation = fmt.Sprintf("CSI interrupted by C0 control (0x%02X)", final)
 		t.Tokens = append(t.Tokens, token)
 		t.Stats.PosFirstBadSequence = int64(t.pos)
@@ -185,34 +174,38 @@ func (t *Tokenizer) parseCSI(start int) {
 	case 'A':
 		{
 			token.CSINotation = "CSI Ps A"
+			number := 1
 			if len(params) > 0 {
-				number := ParseNumberParam(params[0], 1)
-				token.Signification = fmt.Sprintf("Cursor Up %d times", number)
+				number = ParseNumberParam(params[0], 1)
 			}
+			token.Signification = fmt.Sprintf("Cursor Up %d times", number)
 		}
 	case 'B':
 		{
 			token.CSINotation = "CSI Ps B"
+			number := 1
 			if len(params) > 0 {
-				number := ParseNumberParam(params[0], 1)
-				token.Signification = fmt.Sprintf("Cursor Down %d times", number)
+				number = ParseNumberParam(params[0], 1)
 			}
+			token.Signification = fmt.Sprintf("Cursor Down %d times", number)
 		}
 	case 'C':
 		{
 			token.CSINotation = "CSI Ps C"
+			number := 1
 			if len(params) > 0 {
-				number := ParseNumberParam(params[0], 1)
-				token.Signification = fmt.Sprintf("Cursor Forward %d times", number)
+				number = ParseNumberParam(params[0], 1)
 			}
+			token.Signification = fmt.Sprintf("Cursor Forward %d times", number)
 		}
 	case 'D':
 		{
 			token.CSINotation = "CSI Ps D"
+			number := 1
 			if len(params) > 0 {
-				number := ParseNumberParam(params[0], 1)
-				token.Signification = fmt.Sprintf("Cursor Backward %d times", number)
+				number = ParseNumberParam(params[0], 1)
 			}
+			token.Signification = fmt.Sprintf("Cursor Backward %d times", number)
 		}
 	case 'H':
 		{
@@ -237,12 +230,12 @@ func (t *Tokenizer) parseCSI(start int) {
 		}
 	case 'm':
 		{
-			token.Type = TokenSGR
+			token.Type = types.TokenSGR
 			token.CSINotation = "CSI Ps... m"
 		}
 	default:
 		{
-			token.Type = TokenUnknown
+			token.Type = types.TokenUnknown
 			token.CSINotation = ""
 		}
 	}
@@ -267,8 +260,8 @@ func (t *Tokenizer) parseDCS(start int) {
 		t.pos++
 	}
 
-	t.Tokens = append(t.Tokens, Token{
-		Type:  TokenDCS,
+	t.Tokens = append(t.Tokens, types.Token{
+		Type:  types.TokenDCS,
 		Pos:   start,
 		Raw:   string(t.input[start:t.pos]),
 		Value: string(data),
@@ -303,8 +296,8 @@ func (t *Tokenizer) parseOSC(start int) {
 		}
 	}
 
-	t.Tokens = append(t.Tokens, Token{
-		Type:       TokenOSC,
+	t.Tokens = append(t.Tokens, types.Token{
+		Type:       types.TokenOSC,
 		Pos:        start,
 		Raw:        string(t.input[start:t.pos]),
 		Value:      string(data),
@@ -315,8 +308,8 @@ func (t *Tokenizer) parseOSC(start int) {
 func (t *Tokenizer) parseOtherEscape(start int) {
 	// ESC c, ESC 7, ESC 8, ESC =, ESC >, ESC (0, ESC (B, ESC #8
 	if t.pos >= len(t.input) {
-		t.Tokens = append(t.Tokens, Token{
-			Type: TokenEscape,
+		t.Tokens = append(t.Tokens, types.Token{
+			Type: types.TokenEscape,
 			Pos:  start,
 			Raw:  string(t.input[start:t.pos]),
 		})
@@ -333,8 +326,8 @@ func (t *Tokenizer) parseOtherEscape(start int) {
 		}
 	}
 
-	t.Tokens = append(t.Tokens, Token{
-		Type: TokenEscape,
+	t.Tokens = append(t.Tokens, types.Token{
+		Type: types.TokenEscape,
 		Pos:  start,
 		Raw:  string(t.input[start:t.pos]),
 	})
@@ -359,7 +352,7 @@ func (t *Tokenizer) collectParams() []string {
 				t.pos++
 			}
 		} else if b == '?' || b == '>' || b == '!' || b == '$' || b == '\'' || b == '"' || b == ' ' {
-			// Intermediate bytes, on les ignore pour l'instant
+			// Intermediate bytes, on les ignore pour l'ins.neot
 			t.pos++
 		} else {
 			// C'est le byte final ou un caractère non valide
@@ -388,8 +381,8 @@ func (t *Tokenizer) parseText(start int) {
 
 	if t.pos > start {
 		text := string(t.input[start:t.pos])
-		t.Tokens = append(t.Tokens, Token{
-			Type:  TokenText,
+		t.Tokens = append(t.Tokens, types.Token{
+			Type:  types.TokenText,
 			Pos:   start,
 			Raw:   text,
 			Value: text,
@@ -404,23 +397,23 @@ func (t *Tokenizer) calculateStats() {
 		t.Stats.TokensByType[token.Type]++
 
 		switch token.Type {
-		case TokenText:
+		case types.TokenText:
 			t.Stats.TotalTextLength += len(token.Value)
 
-		case TokenSGR:
+		case types.TokenSGR:
 			for _, param := range token.Parameters {
 				t.Stats.SGRCodes[param]++
 			}
 
-		case TokenCSI:
+		case types.TokenCSI:
 			if token.CSINotation != "" {
 				t.Stats.CSISequences[token.CSINotation]++
 			}
 
-		case TokenC0:
+		case types.TokenC0:
 			t.Stats.C0Codes[token.C0Code]++
 
-		case TokenC1:
+		case types.TokenC1:
 			t.Stats.C1Codes[token.C1Code]++
 		}
 	}
@@ -543,4 +536,9 @@ func ParseDoubleNumbersParam(params []string, defaultValue []int) []int {
 	}
 
 	return result
+}
+
+// GetStats retourne les statistiques de tokenization
+func (t *Tokenizer) GetStats() types.TokenStats {
+	return t.Stats
 }

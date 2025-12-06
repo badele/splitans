@@ -1,15 +1,101 @@
 package main
 
 import (
-	"flag"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/alecthomas/kong"
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/transform"
+
 	"splitans/exporter"
-	"splitans/tokenizer"
+	"splitans/importer/ansi"
+	"splitans/importer/neotex"
+	"splitans/types"
 )
+
+type CLI struct {
+	File string `arg:"" optional:"" type:"path" help:"ANSI file to process (reads from stdin if not specified)"`
+
+	Input struct {
+		Iformat   string `short:"f" default:"ansi" enum:"ansi,json, neotex,neopack" help:"Input format: ansi, json, neotex, neopack"`
+		Iencoding string `short:"e" required:"true" enum:"cp437,cp850,utf8,iso-8859-1" help:"Input encoding: cp437, cp850, utf8, iso-8859-1"`
+	} `embed:"" prefix:"" group:"Input options:"`
+
+	Output struct {
+		Oformat   string `short:"F" default:"plaintext" enum:"ansi,json,neotex,neopack,plaintext" help:"Output format ansi, json, neotex, neopack, plaintext"`
+		Oencoding string `short:"E" required:"true" enum:"cp437,cp850,utf8,iso-8859-1" help:"Input encoding: cp437, cp850, utf8, iso-8859-1"`
+		Save      string `short:"S" type:"path" help:"Save to file (for -oformat option (neotex)"`
+		Wrap      int    `short:"W" default:80 help:"Wrap text to specified width"`
+		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
+	} `embed:"" prefix:"" group:"Output options:"`
+
+	Debug struct {
+		Debug bool `short:"d" help:"Enable debug mode (displays cursor positions)"`
+		Stats bool `short:"s" help:"Display usage statistics for characters and sequences"`
+		Table bool `short:"t" help:"Display tokens in table format"`
+	} `embed:"" prefix:"" group:"Debug options:"`
+}
+
+func convertEncoding(data []byte, sourceEncoding string) ([]byte, error) {
+	if sourceEncoding == "utf8" {
+		return data, nil
+	}
+
+	var decoder *encoding.Decoder
+
+	switch sourceEncoding {
+	case "cp437":
+		decoder = charmap.CodePage437.NewDecoder()
+	case "cp850":
+		decoder = charmap.CodePage850.NewDecoder()
+	case "iso-8859-1":
+		decoder = charmap.ISO8859_1.NewDecoder()
+	default:
+		return nil, fmt.Errorf("unsupported encoding: %s", sourceEncoding)
+	}
+
+	// Convert to UTF-8
+	reader := transform.NewReader(bytes.NewReader(data), decoder)
+	utf8Data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("encoding conversion error: %w", err)
+	}
+
+	return utf8Data, nil
+}
+
+func convertToEncoding(data []byte, targetEncoding string) ([]byte, error) {
+	if targetEncoding == "utf8" {
+		return data, nil
+	}
+
+	var encoder *encoding.Encoder
+
+	switch targetEncoding {
+	case "cp437":
+		encoder = charmap.CodePage437.NewEncoder()
+	case "cp850":
+		encoder = charmap.CodePage850.NewEncoder()
+	case "iso-8859-1":
+		encoder = charmap.ISO8859_1.NewEncoder()
+	default:
+		return nil, fmt.Errorf("unsupported encoding: %s", targetEncoding)
+	}
+
+	// Convert from UTF-8 to target encoding
+	reader := transform.NewReader(bytes.NewReader(data), encoder)
+	encodedData, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("encoding conversion error: %w", err)
+	}
+
+	return encodedData, nil
+}
 
 func ConcatenateTextAndSequence(left, right string, leftWidth int, separator string) string {
 	leftLines := strings.Split(left, "\n")
@@ -18,8 +104,6 @@ func ConcatenateTextAndSequence(left, right string, leftWidth int, separator str
 	result := []string{}
 	numLines := len(leftLines)
 
-	// var result strings.Builder
-
 	for i := 0; i < numLines; i++ {
 		if i < len(leftLines) {
 			leftLine := leftLines[i]
@@ -27,6 +111,11 @@ func ConcatenateTextAndSequence(left, right string, leftWidth int, separator str
 			if i < len(rightLines) {
 				rightLine = rightLines[i]
 			}
+
+			if len(leftLine) < leftWidth {
+				break
+			}
+
 			result = append(result, fmt.Sprintf("%s%s%s", leftLine, separator, rightLine))
 		}
 	}
@@ -35,56 +124,23 @@ func ConcatenateTextAndSequence(left, right string, leftWidth int, separator str
 }
 
 func main() {
-	// Flags
-	jsonOutput := flag.Bool("json", false, "")
-	flag.BoolVar(jsonOutput, "j", false, "")
-
-	multiFormatMode := flag.Bool("multiformat", false, "")
-	flag.BoolVar(multiFormatMode, "m", false, "")
-
-	writePath := flag.String("write", "", "")
-	flag.StringVar(writePath, "w", "", "")
-
-	debugMode := flag.Bool("debug", false, "")
-	flag.BoolVar(debugMode, "d", false, "")
-
-	statsMode := flag.Bool("stats", false, "")
-	flag.BoolVar(statsMode, "s", false, "")
-
-	tableOutput := flag.Bool("table", false, "")
-	flag.BoolVar(tableOutput, "t", false, "")
-
-	// Customize help message
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [options] [file.ans]\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "If no file is specified, reads from stdin (pipe).\n")
-		fmt.Fprintf(os.Stderr, "Default behavior: displays plain text content to stdout.\n")
-		fmt.Fprintf(os.Stderr, "Use output redirection to save to file: %s file.ans > output.txt\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Options:\n")
-		fmt.Fprintf(os.Stderr, "  -t, --table\n")
-		fmt.Fprintf(os.Stderr, "        Display tokens in table format\n")
-		fmt.Fprintf(os.Stderr, "  -j, --json\n")
-		fmt.Fprintf(os.Stderr, "        Display tokens in JSON format\n")
-		fmt.Fprintf(os.Stderr, "  -s, --stats\n")
-		fmt.Fprintf(os.Stderr, "        Display usage statistics for characters and sequences\n")
-		fmt.Fprintf(os.Stderr, "  -m, --multiformat\n")
-		fmt.Fprintf(os.Stderr, "        Export to stdout or .ant and .anc files (with -s param)\n")
-		fmt.Fprintf(os.Stderr, "  -w, --write\n")
-		fmt.Fprintf(os.Stderr, "        Write the multiformat to file .ant and .anc files (with -m param)\n")
-		fmt.Fprintf(os.Stderr, "  -d, --debug\n")
-		fmt.Fprintf(os.Stderr, "        Enable debug mode (displays cursor positions)\n")
-	}
-
-	flag.Parse()
-
-	args := flag.Args()
+	var cli CLI
+	ctx := kong.Parse(&cli,
+		kong.Name("splitans"),
+		kong.Description("ANSI art file processor - displays plain text content by default.\nUse output redirection to save to file: splitans file.ans > output.txt"),
+		kong.UsageOnError(),
+	)
 
 	var data []byte
 	var err error
 	var filename string
+	var encoding string
 
+	/////////////////////////////////////////////////////////////////////////////
+	// Parse argument file or stdin
+	/////////////////////////////////////////////////////////////////////////////
 	// Read from stdin if no file argument is provided
-	if len(args) == 0 {
+	if cli.File == "" {
 		// Check if stdin is a pipe or has data
 		stat, err := os.Stdin.Stat()
 		if err != nil {
@@ -101,13 +157,13 @@ func main() {
 			}
 			filename = "stdin"
 		} else {
-			// No pipe and no file argument
-			flag.Usage()
-			os.Exit(1)
+			// No pipe and no file argument - show help
+			_ = ctx.PrintUsage(false)
+			os.Exit(0)
 		}
 	} else {
 		// Read from file
-		filename = args[0]
+		filename = cli.File
 		data, err = os.ReadFile(filename)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error reading file: %v\n", err)
@@ -115,29 +171,74 @@ func main() {
 		}
 	}
 
-	tok := tokenizer.NewTokenizer(data)
-	tokens := tok.Tokenize()
+	// Convert encoding to UTF-8
+	encoding = cli.Input.Iencoding
+	switch cli.Input.Iformat {
+	case "neotex", "neopack":
+		if cli.Input.Iencoding != "utf8" {
+			fmt.Fprintf(os.Stderr, "Error: --iformat=%s requires --Iencoding=utf8 (neotex and neopack formats are always UTF-8)\n", cli.Input.Iencoding)
+			os.Exit(1)
+		}
+		encoding = "utf8"
+	}
+
+	data, err = convertEncoding(data, encoding)
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Encoding conversion error: %v\n", err)
+		os.Exit(1)
+	}
+
+	var tokens []types.Token
+	var tok types.TokenizerWithStats
+
+	/////////////////////////////////////////////////////////////////////////////
+	// Read Input format file
+	/////////////////////////////////////////////////////////////////////////////
+	switch cli.Input.Iformat {
+	case "ansi":
+		tok = ansi.NewANSITokenizer(data)
+		tokens = tok.Tokenize()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ANSI parse error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "neopack":
+		tok = neotex.NewNeopackTokenizer(data)
+		tokens = tok.Tokenize()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Neopack parse error: %v\n", err)
+			os.Exit(1)
+		}
+
+	// case "neotex":
+	// 	tok = neotex.NewTokenizer(textData, seqData)
+	// 	tokens = tok.Tokenize()
+	// 	if err != nil {
+	// 		fmt.Fprintf(os.Stderr, "Neotex parse error: %v\n", err)
+	// 		os.Exit(1)
+	// 	}
+
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown format: %s\n", cli.Input.Iformat)
+		os.Exit(1)
+	}
 
 	// Display statistics
-	if *statsMode {
+	if cli.Debug.Stats {
 		exporter.DisplayStats(tok)
 		return
 	}
 
-	// Export to JSON
-	if *jsonOutput {
-		exporter.DisplayTokensJSON(tok)
-		return
-	}
-
 	// Display table
-	if *tableOutput {
-		if tok.Stats.PosFirstBadSequence > 0 {
+	if cli.Debug.Table {
+		stats := tok.GetStats()
+		if stats.PosFirstBadSequence > 0 {
 			fmt.Printf("=== Parsing file: %s ===\n\n", filename)
 		}
 
-		// fmt.Printf("=== file size: %d bytes ===\n", tok.FileSize)
-		fmt.Printf("=== %% Parsed %f  ===\n", tok.Stats.ParsedPercent)
+		fmt.Printf("=== %% Parsed %f  ===\n", stats.ParsedPercent)
 
 		if err := exporter.ExportTokensToTable(tokens, os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying table: %v\n", err)
@@ -146,31 +247,88 @@ func main() {
 		return
 	}
 
-	plainText, err := exporter.GetPlainText(tokens)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error displaying plain text: %v\n", err)
+	// Validate --write option usage
+	if cli.Output.Save != "" && cli.Output.Oformat != "neotex" {
+		fmt.Fprintf(os.Stderr, "Error: --write option can only be used with --oformat=neotex\n")
 		os.Exit(1)
 	}
 
-	if *multiFormatMode {
-		sequenceText, err := exporter.GetPlainTextSequence(tokens)
+	if cli.Output.Oformat == "neotex" && cli.Output.Save == "" {
+		fmt.Fprintf(os.Stderr, "Error: --oformat=neotex requires --save option to specify output file (.neot and .neos)\n")
+		os.Exit(1)
+	}
+
+	// Validate output encoding for neotex/neopack (must be utf8)
+	if (cli.Output.Oformat == "neotex" || cli.Output.Oformat == "neopack") && cli.Output.Oencoding != "utf8" {
+		fmt.Fprintf(os.Stderr, "Error: --oformat=%s requires --Oencoding=utf8 (neotex and neopack formats are always UTF-8)\n", cli.Output.Oformat)
+		os.Exit(1)
+	}
+
+	/////////////////////////////////////////////////////////////////////////////
+	// Write Output format file
+	/////////////////////////////////////////////////////////////////////////////
+	switch cli.Output.Oformat {
+	case "ansi":
+		ansiOutput, err := exporter.ExportFlattenedANSI(cli.Output.Wrap, tokens, cli.Output.Oencoding, cli.Output.VGA)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error displaying sequence text: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Error exporting to ANSI: %v\n", err)
 			os.Exit(1)
 		}
 
-		if *writePath != "" {
-			if err := exporter.ExportToMultipleFile(*writePath, plainText, sequenceText); err != nil {
-				fmt.Fprintf(os.Stderr, "Error exporting to multifile: %v\n", err)
-				os.Exit(1)
-			}
-
-		} else {
-			combined := ConcatenateTextAndSequence(plainText, sequenceText, 80, " | ")
-			fmt.Println(combined)
+		// Convert to output encoding if needed
+		outputBytes, err := convertToEncoding([]byte(ansiOutput), cli.Output.Oencoding)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
+			os.Exit(1)
 		}
-	} else {
-		fmt.Println(plainText)
-		return
+
+		fmt.Print(string(outputBytes))
+	case "neotex":
+		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Wrap, tokens, cli.Output.Oencoding)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating neotex format: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := exporter.ExportToNeotexFile(cli.Output.Save, plainText, sequenceText); err != nil {
+			fmt.Fprintf(os.Stderr, "Error exporting to neotex file: %v\n", err)
+			os.Exit(1)
+		}
+	case "neopack":
+		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Wrap, tokens, cli.Output.Oencoding)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating neopack format: %v\n", err)
+			os.Exit(1)
+		}
+
+		combined := ConcatenateTextAndSequence(plainText, sequenceText, 80, " | ")
+		fmt.Println(combined)
+	case "json":
+		exporter.TokensJSON(tok)
+	case "plaintext":
+		plainText, err := exporter.ExportFlattenedText(cli.Output.Wrap, tokens, cli.Output.Oencoding)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error displaying plain text: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Convert to output encoding if needed
+		outputBytes, err := convertToEncoding([]byte(plainText), cli.Output.Oencoding)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Replace null bytes (0x0) with spaces (0x20)
+		for i, b := range outputBytes {
+			if b == 0x0 {
+				outputBytes[i] = 0x20
+			}
+		}
+
+		fmt.Println(string(outputBytes))
+	default:
+		fmt.Fprintf(os.Stderr, "Error: unsupported output format: %s\n", cli.Output.Oformat)
+		os.Exit(1)
 	}
 }

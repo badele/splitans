@@ -5,11 +5,21 @@ import (
 	"fmt"
 	"os"
 
-	"splitans/tokenizer"
+	"splitans/types"
 )
 
-func DisplayTokensJSON(tok *tokenizer.Tokenizer) {
-	data, err := json.MarshalIndent(tok, "", "  ")
+type TokenizerJSONOutput struct {
+	Tokens []types.Token    `json:"tokens"`
+	Stats  types.TokenStats `json:"stats"`
+}
+
+func TokensJSON(tok types.TokenizerWithStats) {
+	output := TokenizerJSONOutput{
+		Tokens: tok.Tokenize(),
+		Stats:  tok.GetStats(),
+	}
+
+	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "JSON Serialization Error: %v\n", err)
 		return

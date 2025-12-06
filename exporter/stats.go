@@ -3,24 +3,27 @@ package exporter
 import (
 	"fmt"
 	"sort"
-	"splitans/tokenizer"
+
+	"splitans/importer/ansi"
+	"splitans/types"
 )
 
-func DisplayStats(tok *tokenizer.Tokenizer) {
+func DisplayStats(tok types.TokenizerWithStats) {
 	type typeCount struct {
-		Type  tokenizer.TokenType
+		Type  types.TokenType
 		Count int
 	}
 
+	stats := tok.GetStats()
 	var typeCounts []typeCount
 
 	fmt.Println("=== Token Statistics ===\n")
-	fmt.Printf("  File size: %d bytes\n", tok.Stats.FileSize)
-	fmt.Printf("  Total tokens: %d\n", tok.Stats.TotalTokens)
+	fmt.Printf("  File size: %d bytes\n", stats.FileSize)
+	fmt.Printf("  Total tokens: %d\n", stats.TotalTokens)
 
 	fmt.Println("\n--- Tokens by Type")
 
-	for t, count := range tok.Stats.TokensByType {
+	for t, count := range stats.TokensByType {
 		typeCounts = append(typeCounts, typeCount{t, count})
 	}
 	sort.Slice(typeCounts, func(i, j int) bool {
@@ -28,21 +31,21 @@ func DisplayStats(tok *tokenizer.Tokenizer) {
 	})
 
 	for _, tc := range typeCounts {
-		percentage := float64(tc.Count) / float64(tok.Stats.TotalTokens) * 100
+		percentage := float64(tc.Count) / float64(stats.TotalTokens) * 100
 		fmt.Printf("  %-30s:  %5d (%.1f%%)\n", tc.Type.String(), tc.Count, percentage)
 	}
 
-	if len(tok.Stats.SGRCodes) > 0 {
-		fmt.Println("\n--- Most Used SGR Codes")
-		displayTopN(tok.Stats.SGRCodes, 10)
+	if len(stats.SGRCodes) > 0 {
+		fmt.Println("\n--- Most Used types.SGR Codes")
+		displayTopN(stats.SGRCodes, 10)
 	}
 
-	if len(tok.Stats.CSISequences) > 0 {
+	if len(stats.CSISequences) > 0 {
 		fmt.Println("\n--- Most Used CSI Sequences")
-		displayTopN(tok.Stats.CSISequences, 10)
+		displayTopN(stats.CSISequences, 10)
 	}
 
-	if len(tok.Stats.C0Codes) > 0 {
+	if len(stats.C0Codes) > 0 {
 		fmt.Println("\n--- C0 Control Codes")
 		type c0Count struct {
 			Code  byte
@@ -50,9 +53,9 @@ func DisplayStats(tok *tokenizer.Tokenizer) {
 			Count int
 		}
 		var c0Counts []c0Count
-		for code, count := range tok.Stats.C0Codes {
+		for code, count := range stats.C0Codes {
 			name := "Unknown"
-			if n, ok := tokenizer.C0Names[code]; ok {
+			if n, ok := types.C0Names[code]; ok {
 				name = n
 			}
 			c0Counts = append(c0Counts, c0Count{code, name, count})
@@ -69,9 +72,9 @@ func DisplayStats(tok *tokenizer.Tokenizer) {
 		}
 	}
 
-	if len(tok.Stats.C1Codes) > 0 {
+	if len(stats.C1Codes) > 0 {
 		fmt.Println("\n--- C1 Control Codes ---")
-		displayTopN(tok.Stats.C1Codes, 10)
+		displayTopN(stats.C1Codes, 10)
 	}
 }
 
@@ -97,7 +100,7 @@ func displayTopN(data map[string]int, n int) {
 
 		displayName := e.Key
 		if code, err := parseInt(e.Key); err == nil {
-			if name, ok := tokenizer.SGRCodes[code]; ok {
+			if name, ok := ansi.SGRCodes[code]; ok {
 				displayName = fmt.Sprintf("%s (%s)", e.Key, name)
 			}
 		}

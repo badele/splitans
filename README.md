@@ -13,8 +13,8 @@
 ```
 
 Splitans is a tokenization tool that parses ANSI files and separates text from
-ANSI sequences. The text is saved to a file with the `.ant` extension and the
-control sequences to a file with the `.anc` extension.
+ANSI sequences. The text is saved to a file with the `.neot` extension and the
+control sequences to a file with the `.neos` extension.
 
 It is also possible to export to various formats, such as table or JSON.
 
@@ -47,7 +47,7 @@ cat file.ans | ./splitans -t
 # Display statistics
 ./splitans -s file.ans
 
-# Export to multiple files (.ant and .anc)
+# Export to multiple files (.neot and .neos)
 ./splitans -m output_filename file.ans
 ```
 
@@ -61,7 +61,7 @@ cat file.ans | ./splitans -t
 success=0; total=0;
 for file in $(find . -name "*.ANS"); do
     total=$((total+1));
-    if ./splitans "$file" > /dev/null 2>&1; then
+    if ./splitans -e cp437 -f ansi -E utf8 -F ansi "$file" > /dev/null 2>&1; then
         success=$((success+1));
     else
         echo "FAILED: $file";
@@ -80,7 +80,7 @@ for file in $(find . -name "*.ANS"); do
 
     printf "=%.0s" {1..80} >> /tmp/result.txt
     echo -e "\n== ${file}\n" >> /tmp/result.txt
-    ./splitans "$file" >> /tmp/result.txt 2>/dev/null
+    ./splitans -e cp437 -f ansi -E utf8 -F ansi "$file" >> /tmp/result.txt 2>/dev/null
     echo -e >> /tmp/result.txt
 done
 ```

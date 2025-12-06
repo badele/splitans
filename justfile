@@ -13,6 +13,11 @@ go-init:
     go mod tidy
   fi
 
+# format all go files
+[group('golang')]
+@go-fmt:
+  go fmt ./...
+
 # build project
 [group('golang')]
 @go-build: go-init

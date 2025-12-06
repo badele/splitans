@@ -3,6 +3,7 @@ module splitans
 go 1.24.3
 
 require (
+	github.com/alecthomas/kong v1.13.0
 	github.com/gdamore/tcell/v2 v2.12.2
 	golang.org/x/text v0.31.0
 )

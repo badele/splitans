@@ -5,10 +5,11 @@ import (
 	"io"
 	"strings"
 
-	"splitans/tokenizer"
+	"splitans/importer/ansi"
+	"splitans/types"
 )
 
-func ExportTokensToTable(tokens []tokenizer.Token, writer io.Writer) error {
+func ExportTokensToTable(tokens []types.Token, writer io.Writer) error {
 	fmt.Fprintln(writer, "\n┌─────────┬────────┬──────────────────────────────────────┬──────────────────────────────────────┬─────────────────┬──────────────────────────────────────┐")
 	fmt.Fprintf(writer, "│ %-7s │ %-6s │ %-36s │ %-36s │ %-15s │ %-36s │\n", "Token", "Pos", "CSISignification", "Signification", "Paramètres", "Raw/Texte")
 	fmt.Fprintln(writer, "├─────────┼────────┼──────────────────────────────────────┼──────────────────────────────────────┼─────────────────┼──────────────────────────────────────┤")
@@ -17,40 +18,40 @@ func ExportTokensToTable(tokens []tokenizer.Token, writer io.Writer) error {
 		var csiSignification, signification, params, rawOrText string
 
 		switch token.Type {
-		case tokenizer.TokenText:
+		case types.TokenText:
 			csiSignification = "-"
 			signification = "TEXT"
 			params = "-"
 			rawOrText = truncate(token.Value, 36)
 
-		case tokenizer.TokenSGR:
-			meanings := tokenizer.ParseSGRParams(token.Parameters)
+		case types.TokenSGR:
+			meanings := ansi.ParseSGRParams(token.Parameters)
 			csiSignification = truncate(token.CSINotation, 36)
 			signification = truncate(strings.Join(meanings, ", "), 36)
 			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)
 			rawOrText = truncate(token.Raw, 36)
 
-		case tokenizer.TokenCSI:
+		case types.TokenCSI:
 			csiSignification = truncate(token.CSINotation, 36)
 			signification = truncate(token.Signification, 36)
 			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)
 			rawOrText = truncate(token.Raw, 36)
 
-		case tokenizer.TokenOSC:
+		case types.TokenOSC:
 			csiSignification = "-"
 			signification = truncate(token.Signification, 36)
 			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)
 			rawOrText = truncate(token.Raw, 36)
 
-		case tokenizer.TokenDCS:
+		case types.TokenDCS:
 			csiSignification = "-"
 			signification = "DCS"
 			params = "-"
 			rawOrText = truncate(token.Raw, 36)
 
-		case tokenizer.TokenC0:
+		case types.TokenC0:
 			csiSignification = "-"
-			if name, ok := tokenizer.C0Names[token.C0Code]; ok {
+			if name, ok := types.C0Names[token.C0Code]; ok {
 				signification = name
 			} else {
 				signification = "C0: unknown"
@@ -58,13 +59,13 @@ func ExportTokensToTable(tokens []tokenizer.Token, writer io.Writer) error {
 			params = fmt.Sprintf("0x%02X", token.C0Code)
 			rawOrText = truncate(token.Raw, 36)
 
-		case tokenizer.TokenC1:
+		case types.TokenC1:
 			csiSignification = "-"
 			signification = fmt.Sprintf("C1: %s", token.C1Code)
 			params = "-"
 			rawOrText = truncate(token.Raw, 36)
 
-		case tokenizer.TokenCSIInterupted:
+		case types.TokenCSIInterupted:
 			csiSignification = truncate(token.CSINotation, 36)
 			signification = "CSI INTERRUPTED"
 			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)

@@ -18,11 +18,13 @@ type Cell struct {
 }
 
 type VirtualTerminal struct {
-	buffer         [][]Cell
-	width          int
-	height         int
-	cursorX        int
-	cursorY        int
+	buffer  [][]Cell
+	width   int
+	height  int
+	cursorX int
+	cursorY int
+	// maxCursorX					int
+	// maxCursorY					int
 	currentSGR     *types.SGR
 	savedCursorX   int
 	savedCursorY   int
@@ -43,11 +45,13 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 	}
 
 	return &VirtualTerminal{
-		buffer:         buffer,
-		width:          width,
-		height:         height,
-		cursorX:        0,
-		cursorY:        0,
+		buffer:  buffer,
+		width:   width,
+		height:  height,
+		cursorX: 0,
+		cursorY: 0,
+		// maxCursorX:        0,
+		// maxCursorY:        0,
 		currentSGR:     defaultSGR,
 		outputEncoding: outputEncoding,
 		useVGAColors:   useVGAColors,
@@ -84,6 +88,14 @@ func (vt *VirtualTerminal) applyToken(token types.Token) error {
 	return nil
 }
 
+// func (vt *VirtualTerminal) computeMaxCursorPosition() {
+// 	vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
+// }
+
+// func (vt *VirtualTerminal) GetMaxCursorPosition() (cursorX int,cursorY int) {
+// 	return vt.maxCursorX, vt.maxCursorY
+// }
+
 func (vt *VirtualTerminal) writeText(text string) {
 	for _, r := range text {
 		if vt.debugCursor {
@@ -97,19 +109,16 @@ func (vt *VirtualTerminal) writeText(text string) {
 			}
 			vt.cursorX++
 
-			// Wrap to next line if we've reached the end
+			// Width to next line if we've reached the end
 			if vt.cursorX >= vt.width {
 				vt.cursorX = 0
 				vt.cursorY++
-				if vt.cursorY >= vt.height {
-					vt.cursorY = vt.height - 1
-				}
+				// vt.maxCursorX = vt.width - 1
 			}
 
 			if vt.debugCursor {
 				fmt.Printf("After writeText Cursor at (%d, %d)\n", vt.cursorX, vt.cursorY)
 			}
-
 		}
 	}
 }
@@ -120,11 +129,24 @@ func (vt *VirtualTerminal) handleC0(code byte) {
 	}
 
 	switch code {
+	case 0x00: // NUL
+		vt.cursorX++
+		if vt.cursorX >= vt.width {
+			vt.cursorX = 0
+			vt.cursorY++
+
+			// vt.maxCursorX = vt.width - 1
+
+		}
+
 	case 0x09: // TAB
 		vt.cursorX = ((vt.cursorX / 8) + 1) * 8
 		if vt.cursorX >= vt.width {
 			vt.cursorX = 0
 			vt.cursorY++
+
+			// vt.maxCursorX = vt.width - 1
+
 		}
 
 	case 0x0A: // LF (Line Feed)
@@ -146,11 +168,13 @@ func (vt *VirtualTerminal) handleC0(code byte) {
 		fmt.Printf("\nAfter handleC0 Cursor at (%d, %d)\n", vt.cursorX, vt.cursorY)
 	}
 
+	// vt.computeMaxCursorPosition()
+
 }
 
 func (vt *VirtualTerminal) handleSGR(params []string) {
 	if vt.debugSGR {
-		fmt.Printf("\nBefore handleSGR Current SGR: '%v', New params: %v\n", vt.currentSGR, params)
+		fmt.Printf("\nBefore handleSGR Current SGR: '%v'\nNew params: %v\n", vt.currentSGR, params)
 	}
 
 	// Convert string params to int params
@@ -205,7 +229,7 @@ func (vt *VirtualTerminal) handleCSI(token types.Token) {
 		}
 		vt.cursorY += n
 
-	case 'C': // Cursor Forward
+	case 'C': // Cursor Right
 		n := 1
 		if len(token.Parameters) > 0 {
 			n, _ = strconv.Atoi(token.Parameters[0])
@@ -213,9 +237,12 @@ func (vt *VirtualTerminal) handleCSI(token types.Token) {
 		vt.cursorX += n
 		if vt.cursorX >= vt.width {
 			vt.cursorX = vt.width - 1
+
+			// vt.maxCursorX = vt.width - 1
+
 		}
 
-	case 'D': // Cursor Backward
+	case 'D': // Cursor Left
 		n := 1
 		if len(token.Parameters) > 0 {
 			n, _ = strconv.Atoi(token.Parameters[0])
@@ -226,21 +253,37 @@ func (vt *VirtualTerminal) handleCSI(token types.Token) {
 		}
 
 	case 'H', 'f': // Cursor Position
-		if vt.debugCursor {
+		// ESC [ H 	Moves the cursor to line 1, column 1 (Home).
+		// ESC [ 6 H 	Moves the cursor to line 6, column 1.
+		// ESC [ ; 12 H 	Moves the cursor to line 1, column 12.
+		// ESC [ 6 ; 12 H 	Moves the cursor to line 6, column 12.
+		// ESC [ 99 ; 99 H 	Moves the cursor to end of Page.
 
+		if vt.debugCursor {
 			fmt.Printf("Before CSI Cursor Position with params: %v, Cusor at (%d, %d) \n", token.Parameters, vt.cursorX, vt.cursorY)
 		}
-		row, col := 0, 0
-		if len(token.Parameters) > 0 {
-			row, _ = strconv.Atoi(token.Parameters[0])
+
+		row, col := 1, 1 // default 1,1 in ANSI
+
+		// replace "" by default value (1)
+		for i := 0; i < len(token.Parameters); i++ {
+			if token.Parameters[i] == "" {
+				token.Parameters[i] = "1"
+			}
 		}
+
 		if len(token.Parameters) > 1 {
+			row, _ = strconv.Atoi(token.Parameters[0])
 			col, _ = strconv.Atoi(token.Parameters[1])
+		} else if len(token.Parameters) > 0 {
+			row, _ = strconv.Atoi(token.Parameters[0])
+			col = 1
 		}
-		vt.cursorY = max(row, 1) - 1
-		vt.cursorX = max(col, 1) - 1
+		vt.cursorY = max(0, row-1)
+		vt.cursorX = col - 1
+
 		if vt.debugCursor {
-			fmt.Printf("After CSI Cursor Position with params: %v, Cusor at (%d, %d) \n", token.Parameters, vt.cursorX, vt.cursorY)
+			fmt.Printf("After CSI Cursor Position with params: %v, Cusor at (%d, %d) \n", token.Parameters, vt.cursorY, vt.cursorX)
 		}
 	case 'J': // Erase Display
 		mode := 0
@@ -297,6 +340,8 @@ func (vt *VirtualTerminal) eraseDisplay(mode int) {
 				vt.buffer[y][x] = Cell{Char: 0x0, SGR: types.NewSGR()}
 			}
 		}
+		vt.cursorX = 0
+		vt.cursorY = 0
 	}
 }
 
@@ -317,11 +362,18 @@ func (vt *VirtualTerminal) eraseLine(mode int) {
 	}
 }
 
-// ExportFlattenedANSI exports the buffer with ANSI codes
-// Uses ExportSplitTextAndSequences and applies SGR codes at the appropriate positions
+// ExportFlattenedANSI exports the buffer with optimized ANSI codes using differential encoding.
+// Uses ExportSplitTextAndSequences and applies minimal SGR codes at the appropriate positions.
+// The legacyMode ensures ANSI 1990 compatibility by using reset+rebuild
+// when attributes need to be turned OFF, rather than using codes like [22m, [23m, etc.
 func (vt *VirtualTerminal) ExportFlattenedANSI() string {
 	lines := vt.ExportSplitTextAndSequences()
 	var builder strings.Builder
+
+	// Track the current SGR state across all lines for differential encoding
+	var currentSGR *types.SGR = nil
+
+	// _,maxCursorY := vt.GetMaxCursorPosition()
 
 	for _, line := range lines {
 		var lineBuilder strings.Builder
@@ -331,12 +383,16 @@ func (vt *VirtualTerminal) ExportFlattenedANSI() string {
 		for i, r := range textRunes {
 			// Check if there's a SGR change at this position
 			if seqIndex < len(line.Sequences) && line.Sequences[seqIndex].Position == i {
-				// Always reset first, then apply new style
-				// This ensures attributes that turn from true to false are properly reset
-				lineBuilder.WriteString("\x1b[0m")
-				if !line.Sequences[seqIndex].SGR.Equals(types.NewSGR()) {
-					lineBuilder.WriteString(line.Sequences[seqIndex].SGR.ToANSI(vt.useVGAColors))
+				newSGR := line.Sequences[seqIndex].SGR
+
+				// Generate differential ANSI sequence (legacyMode=true for ANSI 1990 compatibility)
+				diffSequence := newSGR.DiffToANSI(currentSGR, vt.useVGAColors, true)
+				if diffSequence != "" {
+					lineBuilder.WriteString(diffSequence)
 				}
+
+				// Update current state
+				currentSGR = newSGR.Copy()
 				seqIndex++
 			}
 
@@ -355,8 +411,10 @@ func (vt *VirtualTerminal) ExportFlattenedANSI() string {
 		}
 	}
 
-	// Reset at the end
-	builder.WriteString("\x1b[0m")
+	// Reset at the end only if not already at default state
+	if !currentSGR.Equals(types.NewSGR()) {
+		builder.WriteString("\x1b[0m")
+	}
 
 	return builder.String()
 }
@@ -379,52 +437,55 @@ func (vt *VirtualTerminal) ExportPlainText() string {
 // Returns a slice of LineWithSequences, each containing the plain text and SGR changes
 func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequences {
 	result := []types.LineWithSequences{}
+	var currentSGR *types.SGR = nil
 
+	maxCursorY := 0
 	for y := 0; y < vt.height; y++ {
+
 		// Check if line has content
-		hasContent := false
 		for x := 0; x < vt.width; x++ {
 			if vt.buffer[y][x].Char != 0x0 {
-				hasContent = true
+				maxCursorY = max(maxCursorY, y)
 				break
 			}
 		}
 
-		if !hasContent {
-			continue
-		}
-
 		line := types.LineWithSequences{
 			Text:      "",
-			Sequences: []types.SGRChange{},
+			Sequences: []types.SGRSequence{},
 		}
 
-		currentSGR := types.NewSGR()
-		charPosition := 0
+		var textBuilder strings.Builder
 
 		for x := 0; x < vt.width; x++ {
 			cell := vt.buffer[y][x]
 
+			// fmt.Printf("Processing cell at (%d, %d): Char='%c' SGR='%v'\n", x, y, cell.Char, cell.SGR)
+
 			// Detect SGR change
 			if !cell.SGR.Equals(currentSGR) {
-				line.Sequences = append(line.Sequences, types.SGRChange{
-					Position: charPosition,
+				line.Sequences = append(line.Sequences, types.SGRSequence{
+					Position: x,
 					SGR:      cell.SGR.Copy(),
 				})
 				currentSGR = cell.SGR.Copy()
+
+				// fmt.Printf("  Detected SGR change at position %d: New SGR='%v'\n", x, cell.SGR)
 			}
 
 			// Add character to text (replace 0x0 with space)
 			char := cell.Char
-			if char == 0x0 {
+			if vt.outputEncoding == "utf8" && char == 0x0 {
 				char = ' '
 			}
-			line.Text += string(char)
-			charPosition++
+
+			textBuilder.WriteRune(char)
 		}
+
+		line.Text = textBuilder.String()
 
 		result = append(result, line)
 	}
 
-	return result
+	return result[:maxCursorY+1]
 }

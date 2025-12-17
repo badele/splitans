@@ -53,27 +53,24 @@ cat file.ans | ./splitans -t
 
 ## MISC
 
-### Test
-
-#### Parsed Correctly
+### Convert cp437 to plaintext ansi
 
 ```bash
-success=0; total=0;
-for file in $(find . -name "*.ANS"); do
-    total=$((total+1));
-    if ./splitans -e cp437 -f ansi -E utf8 -F ansi "$file" > /dev/null 2>&1; then
-        success=$((success+1));
-    else
-        echo "FAILED: $file";
-    fi;
-done;
-
-echo "Success: $success/$total"
+./splitans -e cp437 -f ansi  -E cp437 -F plaintext "<FILENAME>" | tr -d '\n' > ansi.ans
 ```
 
-#### Check output content
+### Test
+
+#### Check Parsed Correctly
 
 ```bash
+just neopack-all-from-ansi
+```
+
+#### Check output all content
+
+```bash
+# ANSI
 echo "" > /tmp/result.txt
 for file in $(find . -name "*.ANS"); do
     echo -e "Parsing $file"
@@ -82,6 +79,12 @@ for file in $(find . -name "*.ANS"); do
     echo -e "\n== ${file}\n" >> /tmp/result.txt
     ./splitans -e cp437 -f ansi -E utf8 -F ansi "$file" >> /tmp/result.txt 2>/dev/null
     echo -e >> /tmp/result.txt
+done
+
+# NEOPACK
+rm -f neopack.neop
+for file in $(find . -name "*.ANS"); do
+   ./splitans -e cp437 -f ansi -E utf8 -F neopack "$file" >> neopack.neop 2>/dev/null
 done
 ```
 

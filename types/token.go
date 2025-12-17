@@ -21,6 +21,7 @@ const (
 	TokenDCS
 	TokenOSC
 	TokenEscape
+	TokenSauce
 	TokenUnknown
 )
 
@@ -44,6 +45,8 @@ func (t TokenType) String() string {
 		return "TokenOSC"
 	case TokenEscape:
 		return "TokenEscape"
+	case TokenSauce:
+		return "TokenSauce"
 	case TokenUnknown:
 		return "TokenUnknown"
 	default:
@@ -80,6 +83,8 @@ func (t *TokenType) UnmarshalJSON(data []byte) error {
 		*t = TokenOSC
 	case "TokenEscape":
 		*t = TokenEscape
+	case "TokenSauce":
+		*t = TokenSauce
 	case "TokenUnknown":
 		*t = TokenUnknown
 	default:

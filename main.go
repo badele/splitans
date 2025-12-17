@@ -30,7 +30,8 @@ type CLI struct {
 		Oformat   string `short:"F" default:"plaintext" enum:"ansi,json,neotex,neopack,plaintext" help:"Output format ansi, json, neotex, neopack, plaintext"`
 		Oencoding string `short:"E" required:"true" enum:"cp437,cp850,utf8,iso-8859-1" help:"Input encoding: cp437, cp850, utf8, iso-8859-1"`
 		Save      string `short:"S" type:"path" help:"Save to file (for -oformat option (neotex)"`
-		Wrap      int    `short:"W" default:80 help:"Wrap text to specified width"`
+		Width     int    `short:"W" default:80 help:"Width text to specified width"`
+		Lines     int    `short:"L" default:1000 help:"Nb lines text"`
 		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
 	} `embed:"" prefix:"" group:"Output options:"`
 
@@ -41,7 +42,7 @@ type CLI struct {
 	} `embed:"" prefix:"" group:"Debug options:"`
 }
 
-func convertEncoding(data []byte, sourceEncoding string) ([]byte, error) {
+func convertToUTF8(data []byte, sourceEncoding string) ([]byte, error) {
 	if sourceEncoding == "utf8" {
 		return data, nil
 	}
@@ -182,7 +183,7 @@ func main() {
 		encoding = "utf8"
 	}
 
-	data, err = convertEncoding(data, encoding)
+	data, err = convertToUTF8(data, encoding)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Encoding conversion error: %v\n", err)
@@ -205,8 +206,10 @@ func main() {
 		}
 
 	case "neopack":
-		tok = neotex.NewNeopackTokenizer(data)
+
+		tok = neotex.NewNeopackTokenizer(data, cli.Output.Width)
 		tokens = tok.Tokenize()
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Neopack parse error: %v\n", err)
 			os.Exit(1)
@@ -269,7 +272,16 @@ func main() {
 	/////////////////////////////////////////////////////////////////////////////
 	switch cli.Output.Oformat {
 	case "ansi":
-		ansiOutput, err := exporter.ExportFlattenedANSI(cli.Output.Wrap, tokens, cli.Output.Oencoding, cli.Output.VGA)
+		var ansiOutput string
+		var err error
+
+		// if cli.Input.Iformat == "ansi" {
+		// 	ansiOutput, err = exporter.ExportPassthroughANSI(tokens)
+		// } else {
+		// 	ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, tokens, cli.Output.Oencoding, cli.Output.VGA)
+		// }
+		ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA)
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error exporting to ANSI: %v\n", err)
 			os.Exit(1)
@@ -284,7 +296,8 @@ func main() {
 
 		fmt.Print(string(outputBytes))
 	case "neotex":
-		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Wrap, tokens, cli.Output.Oencoding)
+		// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
+		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neotex format: %v\n", err)
 			os.Exit(1)
@@ -295,7 +308,8 @@ func main() {
 			os.Exit(1)
 		}
 	case "neopack":
-		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Wrap, tokens, cli.Output.Oencoding)
+		// Neopack format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
+		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neopack format: %v\n", err)
 			os.Exit(1)
@@ -303,10 +317,11 @@ func main() {
 
 		combined := ConcatenateTextAndSequence(plainText, sequenceText, 80, " | ")
 		fmt.Println(combined)
+
 	case "json":
 		exporter.TokensJSON(tok)
 	case "plaintext":
-		plainText, err := exporter.ExportFlattenedText(cli.Output.Wrap, tokens, cli.Output.Oencoding)
+		plainText, err := exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying plain text: %v\n", err)
 			os.Exit(1)

@@ -1,23 +1,21 @@
-package ansi
+package neotex
 
 import (
 	"reflect"
 	"testing"
-
-	"splitans/types"
 )
 
 func TestTokenizeText(t *testing.T) {
 	input := []byte("Hello World")
-	tokenizer := NewANSITokenizer(input)
+	tokenizer := NewTokenizer(input)
 	tokens := tokenizer.Tokenize()
 
 	if len(tokens) != 1 {
 		t.Fatalf("Expected 1 token, got %d", len(tokens))
 	}
 
-	if tokens[0].Type != types.TokenText {
-		t.Errorf("Expected types.TokenText, got %v", tokens[0].Type)
+	if tokens[0].Type != TokenText {
+		t.Errorf("Expected TokenText, got %v", tokens[0].Type)
 	}
 
 	if tokens[0].Value != "Hello World" {
@@ -39,15 +37,15 @@ func TestTokenizeC0(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer(tt.input)
+			tokenizer := NewTokenizer(tt.input)
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
 				t.Fatalf("Expected 1 token, got %d", len(tokens))
 			}
 
-			if tokens[0].Type != types.TokenC0 {
-				t.Errorf("Expected types.TokenC0, got %v", tokens[0].Type)
+			if tokens[0].Type != TokenC0 {
+				t.Errorf("Expected TokenC0, got %v", tokens[0].Type)
 			}
 
 			if tokens[0].C0Code != tt.expected {
@@ -73,15 +71,15 @@ func TestTokenizeSGR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokenizer := NewTokenizer([]byte(tt.input))
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
 				t.Fatalf("Expected 1 token, got %d", len(tokens))
 			}
 
-			if tokens[0].Type != types.TokenSGR {
-				t.Errorf("Expected types.TokenSGR, got %v", tokens[0].Type)
+			if tokens[0].Type != TokenSGR {
+				t.Errorf("Expected TokenSGR, got %v", tokens[0].Type)
 			}
 
 			if !reflect.DeepEqual(tokens[0].Parameters, tt.expectedParams) {
@@ -104,15 +102,15 @@ func TestTokenizeCSI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokenizer := NewTokenizer([]byte(tt.input))
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
 				t.Fatalf("Expected 1 token, got %d", len(tokens))
 			}
 
-			if tokens[0].Type != types.TokenCSI {
-				t.Errorf("Expected types.TokenCSI, got %v", tokens[0].Type)
+			if tokens[0].Type != TokenCSI {
+				t.Errorf("Expected TokenCSI, got %v", tokens[0].Type)
 			}
 
 			if !reflect.DeepEqual(tokens[0].Parameters, tt.expectedParams) {
@@ -135,15 +133,15 @@ func TestTokenizeOSC(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokenizer := NewTokenizer([]byte(tt.input))
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
 				t.Fatalf("Expected 1 token, got %d", len(tokens))
 			}
 
-			if tokens[0].Type != types.TokenOSC {
-				t.Errorf("Expected types.TokenOSC, got %v", tokens[0].Type)
+			if tokens[0].Type != TokenOSC {
+				t.Errorf("Expected TokenOSC, got %v", tokens[0].Type)
 			}
 
 			if !reflect.DeepEqual(tokens[0].Parameters, tt.expectedParams) {
@@ -155,15 +153,15 @@ func TestTokenizeOSC(t *testing.T) {
 
 func TestTokenizeDCS(t *testing.T) {
 	input := "\x1bP1$qm\x1b\\"
-	tokenizer := NewANSITokenizer([]byte(input))
+	tokenizer := NewTokenizer([]byte(input))
 	tokens := tokenizer.Tokenize()
 
 	if len(tokens) != 1 {
 		t.Fatalf("Expected 1 token, got %d", len(tokens))
 	}
 
-	if tokens[0].Type != types.TokenDCS {
-		t.Errorf("Expected types.TokenDCS, got %v", tokens[0].Type)
+	if tokens[0].Type != TokenDCS {
+		t.Errorf("Expected TokenDCS, got %v", tokens[0].Type)
 	}
 
 	if tokens[0].Value != "1$qm" {
@@ -185,15 +183,15 @@ func TestTokenizeC1(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokenizer := NewTokenizer([]byte(tt.input))
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
 				t.Fatalf("Expected 1 token, got %d", len(tokens))
 			}
 
-			if tokens[0].Type != types.TokenC1 {
-				t.Errorf("Expected types.TokenC1, got %v", tokens[0].Type)
+			if tokens[0].Type != TokenC1 {
+				t.Errorf("Expected TokenC1, got %v", tokens[0].Type)
 			}
 
 			if tokens[0].C1Code != tt.expectedCode {
@@ -205,7 +203,7 @@ func TestTokenizeC1(t *testing.T) {
 
 func TestTokenizeMixed(t *testing.T) {
 	input := "Hello \x1b[31mRed\x1b[0m World"
-	tokenizer := NewANSITokenizer([]byte(input))
+	tokenizer := NewTokenizer([]byte(input))
 	tokens := tokenizer.Tokenize()
 
 	if len(tokens) != 5 {
@@ -213,27 +211,27 @@ func TestTokenizeMixed(t *testing.T) {
 	}
 
 	// Token 1: "Hello "
-	if tokens[0].Type != types.TokenText || tokens[0].Value != "Hello " {
+	if tokens[0].Type != TokenText || tokens[0].Value != "Hello " {
 		t.Errorf("Token 1: expected text 'Hello ', got %v", tokens[0])
 	}
 
 	// Token 2: SGR [31m
-	if tokens[1].Type != types.TokenSGR {
+	if tokens[1].Type != TokenSGR {
 		t.Errorf("Token 2: expected SGR, got %v", tokens[1].Type)
 	}
 
 	// Token 3: "Red"
-	if tokens[2].Type != types.TokenText || tokens[2].Value != "Red" {
+	if tokens[2].Type != TokenText || tokens[2].Value != "Red" {
 		t.Errorf("Token 3: expected text 'Red', got %v", tokens[2])
 	}
 
 	// Token 4: SGR [0m
-	if tokens[3].Type != types.TokenSGR {
+	if tokens[3].Type != TokenSGR {
 		t.Errorf("Token 4: expected SGR, got %v", tokens[3].Type)
 	}
 
 	// Token 5: " World"
-	if tokens[4].Type != types.TokenText || tokens[4].Value != " World" {
+	if tokens[4].Type != TokenText || tokens[4].Value != " World" {
 		t.Errorf("Token 5: expected text ' World', got %v", tokens[4])
 	}
 }
@@ -383,56 +381,56 @@ func TestCSIWithSignification(t *testing.T) {
 	tests := []struct {
 		name                  string
 		input                 string
-		expectedType          types.TokenType
+		expectedType          TokenType
 		expectedNotation      string
 		expectedSignification string
 	}{
 		{
 			name:                  "Cursor Up",
 			input:                 "\x1b[5A",
-			expectedType:          types.TokenCSI,
+			expectedType:          TokenCSI,
 			expectedNotation:      "CSI Ps A",
 			expectedSignification: "Cursor Up 5 times",
 		},
 		{
 			name:                  "Cursor Down",
 			input:                 "\x1b[3B",
-			expectedType:          types.TokenCSI,
+			expectedType:          TokenCSI,
 			expectedNotation:      "CSI Ps B",
 			expectedSignification: "Cursor Down 3 times",
 		},
 		{
 			name:                  "Cursor Right",
 			input:                 "\x1b[2C",
-			expectedType:          types.TokenCSI,
+			expectedType:          TokenCSI,
 			expectedNotation:      "CSI Ps C",
 			expectedSignification: "Cursor Right 2 times",
 		},
 		{
 			name:                  "Cursor Left",
 			input:                 "\x1b[4D",
-			expectedType:          types.TokenCSI,
+			expectedType:          TokenCSI,
 			expectedNotation:      "CSI Ps D",
 			expectedSignification: "Cursor Left 4 times",
 		},
 		{
 			name:                  "Erase Display",
 			input:                 "\x1b[2J",
-			expectedType:          types.TokenCSI,
+			expectedType:          TokenCSI,
 			expectedNotation:      "CSI Ps J",
 			expectedSignification: "EraseAll",
 		},
 		{
 			name:                  "Save Cursor Position",
 			input:                 "\x1b[s",
-			expectedType:          types.TokenCSI,
+			expectedType:          TokenCSI,
 			expectedNotation:      "CSI s",
 			expectedSignification: "Save Cursor Position",
 		},
 		{
 			name:                  "Restore Cursor Position",
 			input:                 "\x1b[u",
-			expectedType:          types.TokenCSI,
+			expectedType:          TokenCSI,
 			expectedNotation:      "CSI u",
 			expectedSignification: "Restore Cursor Position",
 		},
@@ -440,7 +438,7 @@ func TestCSIWithSignification(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokenizer := NewTokenizer([]byte(tt.input))
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
@@ -467,15 +465,15 @@ func TestCSIWithSignification(t *testing.T) {
 func TestTokenUnknown(t *testing.T) {
 	// Test d'une séquence CSI non reconnue
 	input := "\x1b[99Z"
-	tokenizer := NewANSITokenizer([]byte(input))
+	tokenizer := NewTokenizer([]byte(input))
 	tokens := tokenizer.Tokenize()
 
 	if len(tokens) != 1 {
 		t.Fatalf("Expected 1 token, got %d", len(tokens))
 	}
 
-	if tokens[0].Type != types.TokenUnknown {
-		t.Errorf("Expected types.TokenUnknown, got %v", tokens[0].Type)
+	if tokens[0].Type != TokenUnknown {
+		t.Errorf("Expected TokenUnknown, got %v", tokens[0].Type)
 	}
 }
 
@@ -483,50 +481,50 @@ func TestCSIWithoutParameters(t *testing.T) {
 	tests := []struct {
 		name             string
 		input            string
-		expectedType     types.TokenType
+		expectedType     TokenType
 		expectedNotation string
 	}{
 		{
 			name:             "Cursor Up without params",
 			input:            "\x1b[A",
-			expectedType:     types.TokenCSI,
+			expectedType:     TokenCSI,
 			expectedNotation: "CSI Ps A",
 		},
 		{
 			name:             "Cursor Down without params",
 			input:            "\x1b[B",
-			expectedType:     types.TokenCSI,
+			expectedType:     TokenCSI,
 			expectedNotation: "CSI Ps B",
 		},
 		{
 			name:             "Cursor Right without params",
 			input:            "\x1b[C",
-			expectedType:     types.TokenCSI,
+			expectedType:     TokenCSI,
 			expectedNotation: "CSI Ps C",
 		},
 		{
 			name:             "Cursor Left without params",
 			input:            "\x1b[D",
-			expectedType:     types.TokenCSI,
+			expectedType:     TokenCSI,
 			expectedNotation: "CSI Ps D",
 		},
 		{
 			name:             "Erase Display without params",
 			input:            "\x1b[J",
-			expectedType:     types.TokenCSI,
+			expectedType:     TokenCSI,
 			expectedNotation: "CSI Ps J",
 		},
 		{
 			name:             "Cursor Position without params",
 			input:            "\x1b[H",
-			expectedType:     types.TokenCSI,
+			expectedType:     TokenCSI,
 			expectedNotation: "CSI Ps H",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokenizer := NewTokenizer([]byte(tt.input))
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
@@ -578,7 +576,7 @@ func TestTokenCSIInterrupted(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokenizer := NewTokenizer([]byte(tt.input))
 			tokens := tokenizer.Tokenize()
 
 			if len(tokens) != 1 {
@@ -587,19 +585,19 @@ func TestTokenCSIInterrupted(t *testing.T) {
 
 			token := tokens[0]
 
-			if token.Type != types.TokenCSIInterupted {
-				t.Errorf("Expected types.TokenCSIInterupted, got %v", token.Type)
+			if token.Type != TokenCSIInterupted {
+				t.Errorf("Expected TokenCSIInterupted, got %v", token.Type)
 			}
 
 			if token.CSINotation != tt.expected {
 				t.Errorf("Expected notation %q, got %q", tt.expected, token.CSINotation)
 			}
 
-			if tokenizer.Stats.PosFirstBadSequence == 0 {
+			if tokenizer.PosFirstBadSequence == 0 {
 				t.Error("Expected PosFirstBadSequence to be set")
 			}
 
-			if tokenizer.Stats.ParsedPercent == 0 {
+			if tokenizer.ParsedPercent == 0 {
 				t.Error("Expected ParsedPercent to be calculated")
 			}
 		})
@@ -608,20 +606,20 @@ func TestTokenCSIInterrupted(t *testing.T) {
 
 func TestTokenTypeString(t *testing.T) {
 	tests := []struct {
-		tokenType types.TokenType
+		tokenType TokenType
 		expected  string
 	}{
-		{types.TokenText, "types.TokenText"},
-		{types.TokenC0, "types.TokenC0"},
-		{types.TokenC1, "types.TokenC1"},
-		{types.TokenCSI, "types.TokenCSI"},
-		{types.TokenCSIInterupted, "types.TokenCSIInterupted"},
-		{types.TokenSGR, "types.TokenSGR"},
-		{types.TokenDCS, "types.TokenDCS"},
-		{types.TokenOSC, "types.TokenOSC"},
-		{types.TokenEscape, "types.TokenEscape"},
-		{types.TokenUnknown, "types.TokenUnknown"},
-		{types.TokenType(999), "types.TokenType(999)"},
+		{TokenText, "TokenText"},
+		{TokenC0, "TokenC0"},
+		{TokenC1, "TokenC1"},
+		{TokenCSI, "TokenCSI"},
+		{TokenCSIInterupted, "TokenCSIInterupted"},
+		{TokenSGR, "TokenSGR"},
+		{TokenDCS, "TokenDCS"},
+		{TokenOSC, "TokenOSC"},
+		{TokenEscape, "TokenEscape"},
+		{TokenUnknown, "TokenUnknown"},
+		{TokenType(999), "TokenType(999)"},
 	}
 
 	for _, tt := range tests {
@@ -642,52 +640,52 @@ func TestTokenString(t *testing.T) {
 	}{
 		{
 			name:     "Text token",
-			token:    types.Token{Type: types.TokenText, Value: "Hello"},
+			token:    Token{Type: TokenText, Value: "Hello"},
 			expected: "TEXT: Hello",
 		},
 		{
 			name:     "C0 token - LF",
-			token:    types.Token{Type: types.TokenC0, C0Code: 0x0A},
+			token:    Token{Type: TokenC0, C0Code: 0x0A},
 			expected: "C0: LF",
 		},
 		{
 			name:     "C0 token - unknown",
-			token:    types.Token{Type: types.TokenC0, C0Code: 0xFF},
+			token:    Token{Type: TokenC0, C0Code: 0xFF},
 			expected: "C0: unknown",
 		},
 		{
 			name:     "C1 token",
-			token:    types.Token{Type: types.TokenC1, C1Code: "NEL"},
+			token:    Token{Type: TokenC1, C1Code: "NEL"},
 			expected: "C1: NEL",
 		},
 		{
 			name:     "CSI token",
-			token:    types.Token{Type: types.TokenCSI, CSINotation: "CSI Ps A"},
+			token:    Token{Type: TokenCSI, CSINotation: "CSI Ps A"},
 			expected: "CSI:  Notation:CSI Ps A",
 		},
 		{
 			name:     "SGR token",
-			token:    types.Token{Type: types.TokenSGR, CSINotation: "CSI Ps... m"},
+			token:    Token{Type: TokenSGR, CSINotation: "CSI Ps... m"},
 			expected: "SGR:  Notation:CSI Ps... m",
 		},
 		{
 			name:     "DCS token",
-			token:    types.Token{Type: types.TokenDCS, Raw: "\x1bP1$qm\x1b\\"},
+			token:    Token{Type: TokenDCS, Raw: "\x1bP1$qm\x1b\\"},
 			expected: "DCS: \x1bP1$qm\x1b\\",
 		},
 		{
 			name:     "OSC token",
-			token:    types.Token{Type: types.TokenOSC, Raw: "\x1b]2;Title\x07"},
+			token:    Token{Type: TokenOSC, Raw: "\x1b]2;Title\x07"},
 			expected: "OSC: \x1b]2;Title\x07",
 		},
 		{
 			name:     "Escape token",
-			token:    types.Token{Type: types.TokenEscape, Raw: "\x1bc"},
+			token:    Token{Type: TokenEscape, Raw: "\x1bc"},
 			expected: "ESC: \x1bc",
 		},
 		{
 			name:     "Unknown token",
-			token:    types.Token{Type: types.TokenUnknown},
+			token:    Token{Type: TokenUnknown},
 			expected: "UNKNOWN",
 		},
 	}
@@ -705,13 +703,13 @@ func TestTokenString(t *testing.T) {
 func TestTokenTypeJSON(t *testing.T) {
 	tests := []struct {
 		name      string
-		tokenType types.TokenType
+		tokenType TokenType
 		expected  string
 	}{
-		{"types.TokenText", types.TokenText, `"types.TokenText"`},
-		{"types.TokenC0", types.TokenC0, `"types.TokenC0"`},
-		{"types.TokenCSI", types.TokenCSI, `"types.TokenCSI"`},
-		{"types.TokenSGR", types.TokenSGR, `"types.TokenSGR"`},
+		{"TokenText", TokenText, `"TokenText"`},
+		{"TokenC0", TokenC0, `"TokenC0"`},
+		{"TokenCSI", TokenCSI, `"TokenCSI"`},
+		{"TokenSGR", TokenSGR, `"TokenSGR"`},
 	}
 
 	for _, tt := range tests {
@@ -725,7 +723,7 @@ func TestTokenTypeJSON(t *testing.T) {
 				t.Errorf("Expected %q, got %q", tt.expected, string(data))
 			}
 
-			var tokenType types.TokenType
+			var tokenType TokenType
 			err = tokenType.UnmarshalJSON(data)
 			if err != nil {
 				t.Fatalf("UnmarshalJSON error: %v", err)
@@ -739,7 +737,7 @@ func TestTokenTypeJSON(t *testing.T) {
 }
 
 func TestTokenTypeUnmarshalJSON_Invalid(t *testing.T) {
-	var tokenType types.TokenType
+	var tokenType TokenType
 	err := tokenType.UnmarshalJSON([]byte(`"InvalidType"`))
 	if err == nil {
 		t.Error("Expected error for invalid token type")

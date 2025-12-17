@@ -17,10 +17,11 @@ import (
 )
 
 type Tokenizer struct {
-	input  []byte
-	pos    int
-	Tokens []types.Token    `json:"tokens"`
-	Stats  types.TokenStats `json:"stats"`
+	input   []byte
+	pos     int              // Position en octets dans input
+	runePos int              // Position en runes (caractères Unicode)
+	Tokens  []types.Token    `json:"tokens"`
+	Stats   types.TokenStats `json:"stats"`
 }
 
 func NewANSITokenizer(input []byte) *Tokenizer {
@@ -36,10 +37,11 @@ func NewANSITokenizer(input []byte) *Tokenizer {
 	}
 
 	return &Tokenizer{
-		input:  input,
-		pos:    0,
-		Tokens: make([]types.Token, 0),
-		Stats:  stats,
+		input:   input,
+		pos:     0,
+		runePos: 0,
+		Tokens:  make([]types.Token, 0),
+		Stats:   stats,
 	}
 }
 
@@ -73,35 +75,41 @@ func (t *Tokenizer) nextToken() {
 	if c < 0x20 {
 		if c == 0x1B { // ESC
 			t.parseEscape(t.pos)
+		} else if c == 0x1A {
+			t.parseSauce(t.pos)
 		} else {
 			t.parseC0(t.pos, c)
 		}
 		return
 	}
 
-	t.parseText(t.pos)
+	t.parseText(t.pos, t.runePos)
 }
 
 func (t *Tokenizer) parseC0(start int, code byte) {
 	token := types.Token{
 		Type:   types.TokenC0,
-		Pos:    start,
+		Pos:    t.runePos,
 		Raw:    string(code),
 		C0Code: code,
 	}
 	t.Tokens = append(t.Tokens, token)
 	t.pos++
+	t.runePos++ // 1 octet ASCII = 1 rune
 }
 
 func (t *Tokenizer) parseEscape(start int) {
+	startRunePos := t.runePos
+	startBytePos := t.pos
 	t.pos++
 
 	if t.pos >= len(t.input) {
 		t.Tokens = append(t.Tokens, types.Token{
 			Type: types.TokenEscape,
-			Pos:  start,
-			Raw:  string(t.input[start:t.pos]),
+			Pos:  startRunePos,
+			Raw:  string(t.input[startBytePos:t.pos]),
 		})
+		t.runePos += (t.pos - startBytePos)
 		return
 	}
 
@@ -112,41 +120,57 @@ func (t *Tokenizer) parseEscape(start int) {
 
 		switch name {
 		case "CSI":
-			t.parseCSI(start)
+			t.parseCSI(startBytePos, startRunePos)
 		case "DCS":
-			t.parseDCS(start)
+			t.parseDCS(startBytePos, startRunePos)
 		case "OSC":
-			t.parseOSC(start)
+			t.parseOSC(startBytePos, startRunePos)
 		case "ST":
 			t.Tokens = append(t.Tokens, types.Token{
 				Type:   types.TokenC1,
-				Pos:    start,
-				Raw:    string(t.input[start:t.pos]),
+				Pos:    startRunePos,
+				Raw:    string(t.input[startBytePos:t.pos]),
 				C1Code: name,
 			})
+			t.runePos += (t.pos - startBytePos)
 		default:
 			t.Tokens = append(t.Tokens, types.Token{
 				Type:   types.TokenC1,
-				Pos:    start,
-				Raw:    string(t.input[start:t.pos]),
+				Pos:    startRunePos,
+				Raw:    string(t.input[startBytePos:t.pos]),
 				C1Code: name,
 			})
+			t.runePos += (t.pos - startBytePos)
 		}
 		return
 	}
 
-	t.parseOtherEscape(start)
+	t.parseOtherEscape(startBytePos, startRunePos)
 }
 
-func (t *Tokenizer) parseCSI(start int) {
+func (t *Tokenizer) parseSauce(start int) {
+	t.pos++
+
+	t.Tokens = append(t.Tokens, types.Token{
+		Type: types.TokenSauce,
+		Pos:  t.pos,
+		Raw:  string(t.input[t.pos:]),
+	})
+
+	t.pos = len(t.input)
+	t.runePos = t.pos
+}
+
+func (t *Tokenizer) parseCSI(startBytePos int, startRunePos int) {
 	params := t.collectParams()
 
 	if t.pos >= len(t.input) {
 		t.Tokens = append(t.Tokens, types.Token{
 			Type: types.TokenCSI,
-			Pos:  start,
-			Raw:  string(t.input[start:t.pos]),
+			Pos:  startRunePos,
+			Raw:  string(t.input[startBytePos:t.pos]),
 		})
+		t.runePos += (t.pos - startBytePos)
 		return
 	}
 
@@ -155,8 +179,8 @@ func (t *Tokenizer) parseCSI(start int) {
 
 	token := types.Token{
 		Type:       types.TokenCSI,
-		Pos:        start,
-		Raw:        string(t.input[start:t.pos]),
+		Pos:        startRunePos,
+		Raw:        string(t.input[startBytePos:t.pos]),
 		Parameters: params,
 	}
 
@@ -166,6 +190,7 @@ func (t *Tokenizer) parseCSI(start int) {
 		token.CSINotation = fmt.Sprintf("CSI interrupted by C0 control (0x%02X)", final)
 		t.Tokens = append(t.Tokens, token)
 		t.Stats.PosFirstBadSequence = int64(t.pos)
+		t.runePos += (t.pos - startBytePos)
 		return
 	}
 
@@ -196,7 +221,7 @@ func (t *Tokenizer) parseCSI(start int) {
 			if len(params) > 0 {
 				number = ParseNumberParam(params[0], 1)
 			}
-			token.Signification = fmt.Sprintf("Cursor Forward %d times", number)
+			token.Signification = fmt.Sprintf("Cursor Right %d times", number)
 		}
 	case 'D':
 		{
@@ -205,9 +230,14 @@ func (t *Tokenizer) parseCSI(start int) {
 			if len(params) > 0 {
 				number = ParseNumberParam(params[0], 1)
 			}
-			token.Signification = fmt.Sprintf("Cursor Backward %d times", number)
+			token.Signification = fmt.Sprintf("Cursor Left %d times", number)
 		}
 	case 'H':
+		// ESC [ H 	Moves the cursor to line 1, column 1 (Home).
+		// ESC [ 6 H 	Moves the cursor to line 6, column 1.
+		// ESC [ ; 12 H 	Moves the cursor to line 1, column 12.
+		// ESC [ 6 ; 12 H 	Moves the cursor to line 6, column 12.
+		// ESC [ 99 ; 99 H 	Moves the cursor to end of Page.
 		{
 			token.CSINotation = "CSI Ps H"
 			numbers := ParseDoubleNumbersParam(params, []int{1, 1})
@@ -241,9 +271,10 @@ func (t *Tokenizer) parseCSI(start int) {
 	}
 
 	t.Tokens = append(t.Tokens, token)
+	t.runePos += (t.pos - startBytePos)
 }
 
-func (t *Tokenizer) parseDCS(start int) {
+func (t *Tokenizer) parseDCS(startBytePos int, startRunePos int) {
 	data := make([]byte, 0)
 	for t.pos < len(t.input) {
 		if t.input[t.pos] == 0x1B && t.pos+1 < len(t.input) && t.input[t.pos+1] == '\\' {
@@ -262,13 +293,14 @@ func (t *Tokenizer) parseDCS(start int) {
 
 	t.Tokens = append(t.Tokens, types.Token{
 		Type:  types.TokenDCS,
-		Pos:   start,
-		Raw:   string(t.input[start:t.pos]),
+		Pos:   startRunePos,
+		Raw:   string(t.input[startBytePos:t.pos]),
 		Value: string(data),
 	})
+	t.runePos += (t.pos - startBytePos)
 }
 
-func (t *Tokenizer) parseOSC(start int) {
+func (t *Tokenizer) parseOSC(startBytePos int, startRunePos int) {
 	data := make([]byte, 0)
 	for t.pos < len(t.input) {
 		if t.input[t.pos] == 0x07 { // BEL
@@ -298,21 +330,23 @@ func (t *Tokenizer) parseOSC(start int) {
 
 	t.Tokens = append(t.Tokens, types.Token{
 		Type:       types.TokenOSC,
-		Pos:        start,
-		Raw:        string(t.input[start:t.pos]),
+		Pos:        startRunePos,
+		Raw:        string(t.input[startBytePos:t.pos]),
 		Value:      string(data),
 		Parameters: params,
 	})
+	t.runePos += (t.pos - startBytePos)
 }
 
-func (t *Tokenizer) parseOtherEscape(start int) {
+func (t *Tokenizer) parseOtherEscape(startBytePos int, startRunePos int) {
 	// ESC c, ESC 7, ESC 8, ESC =, ESC >, ESC (0, ESC (B, ESC #8
 	if t.pos >= len(t.input) {
 		t.Tokens = append(t.Tokens, types.Token{
 			Type: types.TokenEscape,
-			Pos:  start,
-			Raw:  string(t.input[start:t.pos]),
+			Pos:  startRunePos,
+			Raw:  string(t.input[startBytePos:t.pos]),
 		})
+		t.runePos += (t.pos - startBytePos) // ASCII: 1 byte = 1 rune
 		return
 	}
 
@@ -328,12 +362,17 @@ func (t *Tokenizer) parseOtherEscape(start int) {
 
 	t.Tokens = append(t.Tokens, types.Token{
 		Type: types.TokenEscape,
-		Pos:  start,
-		Raw:  string(t.input[start:t.pos]),
+		Pos:  startRunePos,
+		Raw:  string(t.input[startBytePos:t.pos]),
 	})
+	t.runePos += (t.pos - startBytePos) // ASCII: 1 byte = 1 rune
 }
 
 func (t *Tokenizer) collectParams() []string {
+	// [] == ESC [ H
+	// [6,1] == ESC [ 6 H
+	// [1,12]  == ESC [ ; 12 H
+	// [6,12] == ESC [ 6 ; 12 H
 	params := make([]string, 0)
 	var current bytes.Buffer
 
@@ -342,10 +381,9 @@ func (t *Tokenizer) collectParams() []string {
 
 		if (b >= '0' && b <= '9') || b == ';' || b == ':' {
 			if b == ';' || b == ':' {
-				if current.Len() > 0 || len(params) > 0 {
-					params = append(params, current.String())
-					current.Reset()
-				}
+				// Always append current param (even if empty) when separator is found
+				params = append(params, current.String())
+				current.Reset()
 				t.pos++
 			} else {
 				current.WriteByte(b)
@@ -355,7 +393,7 @@ func (t *Tokenizer) collectParams() []string {
 			// Intermediate bytes, on les ignore pour l'ins.neot
 			t.pos++
 		} else {
-			// C'est le byte final ou un caractère non valide
+			// CSI or SGR Final byte or invalid character
 			break
 		}
 	}
@@ -367,7 +405,7 @@ func (t *Tokenizer) collectParams() []string {
 	return params
 }
 
-func (t *Tokenizer) parseText(start int) {
+func (t *Tokenizer) parseText(startByte int, startRune int) {
 	for t.pos < len(t.input) {
 		b := t.input[t.pos]
 
@@ -377,13 +415,14 @@ func (t *Tokenizer) parseText(start int) {
 
 		_, size := utf8.DecodeRune(t.input[t.pos:])
 		t.pos += size
+		t.runePos++ // Incrémente la position en runes
 	}
 
-	if t.pos > start {
-		text := string(t.input[start:t.pos])
+	if t.pos > startByte {
+		text := string(t.input[startByte:t.pos])
 		t.Tokens = append(t.Tokens, types.Token{
 			Type:  types.TokenText,
-			Pos:   start,
+			Pos:   startRune, // Utilise la position en runes
 			Raw:   text,
 			Value: text,
 		})

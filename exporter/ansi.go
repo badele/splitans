@@ -7,8 +7,8 @@ import (
 	"splitans/types"
 )
 
-func ExportFlattenedANSI(width int, tokens []types.Token, outputEncoding string, useVGAColors bool) (string, error) {
-	vt := processor.NewVirtualTerminal(width, 1000, outputEncoding, useVGAColors)
+func ExportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool) (string, error) {
+	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, useVGAColors)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", fmt.Errorf("error applying tokens: %w", err)

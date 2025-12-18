@@ -315,7 +315,13 @@ func main() {
 			os.Exit(1)
 		}
 
-		combined := ConcatenateTextAndSequence(plainText, sequenceText, 80, " | ")
+		metadatas := neotex.ExtractMetadata(strings.Split(sequenceText, "\n"))
+
+		fmt.Printf("=== Neopack Metadata ===\n")
+		fmt.Printf("Version: %d\n", metadatas.Version)
+		fmt.Printf("Trimmed Width: %d\n", metadatas.TrimmedWidth)
+
+		combined := ConcatenateTextAndSequence(plainText, sequenceText, cli.Output.Width, " | ")
 		fmt.Println(combined)
 
 	case "json":

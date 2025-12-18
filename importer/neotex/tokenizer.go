@@ -51,8 +51,8 @@ import (
 )
 
 type Tokenizer struct {
-	textLines [][]byte         // Lignes de texte (sans \n)
-	seqLines  [][]byte         // Lignes de séquences (sans \n)
+	textLines []string         // Lignes de texte (sans \n)
+	seqLines  []string         // Lignes de séquences (sans \n)
 	Tokens    []types.Token    `json:"tokens"`
 	Stats     types.TokenStats `json:"stats"`
 }
@@ -151,7 +151,7 @@ func ApplyNeotexCode(code string, sgr *types.SGR) {
 	}
 }
 
-func NewNeotexTokenizer(textLines [][]byte, seqLines [][]byte) *Tokenizer {
+func NewNeotexTokenizer(textLines []string, seqLines []string) *Tokenizer {
 	return &Tokenizer{
 		textLines: textLines,
 		seqLines:  seqLines,
@@ -206,7 +206,7 @@ func parseRGBHex(hexStr string) (r, g, b uint8, err error) {
 // Format: "texte (80 car) | séquence"
 // Note: width est en nombre de runes (caractères), pas en bytes
 // Retourne des tableaux de lignes pour éviter les \n embeddés
-func SplitNeopackFormat(width int, data []byte) (textLines [][]byte, seqLines [][]byte) {
+func SplitNeopackFormat(width int, data []byte) (textLines []string, seqLines []string) {
 	separator := " | "
 
 	lines := strings.Split(string(data), "\n")
@@ -232,8 +232,8 @@ func SplitNeopackFormat(width int, data []byte) (textLines [][]byte, seqLines []
 		// Extract text and sequence using rune positions
 		text := string(runes[:width])
 		seq := string(runes[width+len(sepRunes):])
-		textLines = append(textLines, []byte(text))
-		seqLines = append(seqLines, []byte(seq))
+		textLines = append(textLines, text)
+		seqLines = append(seqLines, seq)
 	}
 
 	return textLines, seqLines

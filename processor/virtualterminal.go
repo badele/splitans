@@ -18,14 +18,14 @@ type Cell struct {
 }
 
 type VirtualTerminal struct {
-	buffer  [][]Cell
-	width   int
-	height  int
-	cursorX int
-	cursorY int
-	// maxCursorX					int
-	// maxCursorY					int
-	currentSGR     *types.SGR
+	buffer     [][]Cell
+	width      int
+	height     int
+	cursorX    int
+	cursorY    int
+	maxCursorX int
+	maxCursorY int
+	currentSGR *types.SGR
 	savedCursorX   int
 	savedCursorY   int
 	outputEncoding string
@@ -45,19 +45,30 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 	}
 
 	return &VirtualTerminal{
-		buffer:  buffer,
-		width:   width,
-		height:  height,
-		cursorX: 0,
-		cursorY: 0,
-		// maxCursorX:        0,
-		// maxCursorY:        0,
+		buffer:         buffer,
+		width:          width,
+		height:         height,
+		cursorX:        0,
+		cursorY:        0,
+		maxCursorX:     0,
+		maxCursorY:     0,
 		currentSGR:     defaultSGR,
 		outputEncoding: outputEncoding,
 		useVGAColors:   useVGAColors,
 		debugCursor:    false,
 		debugSGR:       false,
 	}
+}
+func (vt *VirtualTerminal) GetWidth() int {
+	return vt.width
+}
+
+func (vt *VirtualTerminal) GetMaxCursorX() int {
+	return vt.maxCursorX
+}
+
+func (vt *VirtualTerminal) GetMaxCursorY() int {
+	return vt.maxCursorY
 }
 
 // ApplyTokens applies ANSI tokens to the virtual terminal
@@ -88,13 +99,6 @@ func (vt *VirtualTerminal) applyToken(token types.Token) error {
 	return nil
 }
 
-// func (vt *VirtualTerminal) computeMaxCursorPosition() {
-// 	vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
-// }
-
-// func (vt *VirtualTerminal) GetMaxCursorPosition() (cursorX int,cursorY int) {
-// 	return vt.maxCursorX, vt.maxCursorY
-// }
 
 func (vt *VirtualTerminal) writeText(text string) {
 	for _, r := range text {
@@ -108,12 +112,15 @@ func (vt *VirtualTerminal) writeText(text string) {
 				SGR:  vt.currentSGR.Copy(),
 			}
 			vt.cursorX++
+			vt.maxCursorX = max(vt.maxCursorX, vt.cursorX)
+			vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
 
 			// Width to next line if we've reached the end
 			if vt.cursorX >= vt.width {
 				vt.cursorX = 0
 				vt.cursorY++
-				// vt.maxCursorX = vt.width - 1
+				vt.maxCursorX = vt.width - 1
+				vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
 			}
 
 			if vt.debugCursor {
@@ -134,9 +141,7 @@ func (vt *VirtualTerminal) handleC0(code byte) {
 		if vt.cursorX >= vt.width {
 			vt.cursorX = 0
 			vt.cursorY++
-
-			// vt.maxCursorX = vt.width - 1
-
+			vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
 		}
 
 	case 0x09: // TAB
@@ -144,16 +149,17 @@ func (vt *VirtualTerminal) handleC0(code byte) {
 		if vt.cursorX >= vt.width {
 			vt.cursorX = 0
 			vt.cursorY++
-
-			// vt.maxCursorX = vt.width - 1
-
+			vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
 		}
 
 	case 0x0A: // LF (Line Feed)
 		vt.cursorY++
+		vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
 		if vt.cursorY >= vt.height {
 			vt.cursorY = vt.height - 1
 		}
+		vt.cursorX = 0
+
 
 	case 0x0D: // CR (Carriage Return)
 		vt.cursorX = 0
@@ -372,8 +378,6 @@ func (vt *VirtualTerminal) ExportFlattenedANSI() string {
 
 	// Track the current SGR state across all lines for differential encoding
 	var currentSGR *types.SGR = nil
-
-	// _,maxCursorY := vt.GetMaxCursorPosition()
 
 	for _, line := range lines {
 		var lineBuilder strings.Builder

@@ -10,20 +10,23 @@ import (
 
 // NeopackMetadata contains metadata extracted from neopack format
 type NeopackMetadata struct {
-	Version int               // Format version (!V1 = 1)
-	Extra   map[string]string // Other metadata (!key:value)
+	Version      int               // Format version (!V1 = 1)
+	TrimmedWidth int               // Trimmed width (!TW73/80 -> 73)
+	Width        int               // Total width (!TW73/80 -> 80)
+	NbLines      int               // Number of lines with content (!NL<n>)
+	Extra        map[string]string // Other metadata (!key:value)
 }
 
 // ExtractMetadata extracts metadata from sequence lines
 // Metadata entries start with '!' (e.g., !V1 for version)
-func ExtractMetadata(seqLines [][]byte) NeopackMetadata {
+func ExtractMetadata(seqLines []string) NeopackMetadata {
 	meta := NeopackMetadata{
 		Version: 0, // 0 means no version found (legacy format)
 		Extra:   make(map[string]string),
 	}
 
 	for _, seqLine := range seqLines {
-		entries := strings.Split(string(seqLine), ";")
+		entries := strings.Split(seqLine, ";")
 		for _, entry := range entries {
 			entry = strings.TrimSpace(entry)
 			if !strings.HasPrefix(entry, "!") {
@@ -37,6 +40,29 @@ func ExtractMetadata(seqLines [][]byte) NeopackMetadata {
 			if strings.HasPrefix(entry, "V") {
 				if v, err := strconv.Atoi(entry[1:]); err == nil {
 					meta.Version = v
+				}
+				continue
+			}
+			
+			// Check trimmed width TW<trimmed>/<total> or TW<number>
+			if strings.HasPrefix(entry, "TW") {
+				twValue := entry[2:]
+				if parts := strings.Split(twValue, "/"); len(parts) == 2 {
+					// Format: TW73/80
+					if v, err := strconv.Atoi(parts[0]); err == nil {
+						meta.TrimmedWidth = v
+					}
+					if v, err := strconv.Atoi(parts[1]); err == nil {
+						meta.Width = v
+					}
+				} 
+				continue
+			}
+
+			// Check number of lines NL<number>
+			if strings.HasPrefix(entry, "NL") {
+				if v, err := strconv.Atoi(entry[2:]); err == nil {
+					meta.NbLines = v
 				}
 				continue
 			}
@@ -55,17 +81,17 @@ func ExtractMetadata(seqLines [][]byte) NeopackMetadata {
 // This allows reusing the existing ANSI tokenizer instead of duplicating parsing logic
 // Tracks SGR state across lines for proper differential encoding
 // Takes arrays of lines (without embedded \n) for cleaner processing
-func ConvertNeotexToANSI(textLines [][]byte, seqLines [][]byte) []byte {
+func ConvertNeotexToANSI(textLines []string, seqLines []string) []byte {
 	var result bytes.Buffer
 	currentSGR := types.NewSGR() // Track SGR state across lines
 
 	for i, textLine := range textLines {
 		var seqLine string
 		if i < len(seqLines) {
-			seqLine = string(seqLines[i])
+			seqLine = seqLines[i]
 		}
 
-		ansiLine, newSGR := convertLineToANSI(string(textLine), seqLine, currentSGR)
+		ansiLine, newSGR := convertLineToANSI(textLine, seqLine, currentSGR)
 		currentSGR = newSGR
 
 		result.WriteString(ansiLine)

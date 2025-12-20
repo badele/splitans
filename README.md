@@ -1,91 +1,78 @@
 ```text
-⠀⣠⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⣦⣄⠀
-⣰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣆
-⣿⣿⣿⡿⠿⠿⠿⠿⠿⢿⣿⡿⠿⠿⠿⠿⠿⠿⣿⣿⣿⠿⠿⠿⣿⣿⣿⣿⣿⣿⡿⠿⠿⠿⠿⠿⠿⢿⡿⠿⠿⠿⠿⠿⠿⠿⢿⣿⣿⡿⠿⠿⠿⠿⣿⣿⣿⣿⠿⠿⢿⣿⣿⡿⠿⠿⣿⣿⣿⡿⠿⠿⠿⠿⠿⣿⣿⣿
-⣿⣿⡏⠀⠀⠀⠀⠀⠀⢸⣿⡇⠀⠀⠀⠀⠀⠀⠀⢻⣿⠀⠀⠀⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⢸⡇⠀⠀⠀⠀⠀⠀⠀⠀⣿⡿⠀⠀⠀⠀⠀⠸⣿⣿⡏⠀⠀⠀⠻⣿⠁⠀⠀⢹⣿⠃⠀⠀⠀⠀⠀⠀⢹⣿⣿
-⣿⣿⠁⠀⠀⠰⠶⢶⣶⣾⣿⡇⠀⠀⢰⣶⡆⠀⠀⢸⣿⠀⠀⠀⣿⣿⣿⣿⣿⣿⣷⣶⡆⠀⠀⢰⣶⣿⣷⣶⣶⠀⠀⠀⢶⣶⣾⣿⠃⠀⠀⣶⡄⠀⠀⢻⣿⡏⠀⠀⠀⠀⠘⠃⠀⠀⢹⣿⠀⠀⠀⠶⠶⢶⣶⣿⣿⣿
-⣿⣿⣇⠀⠀⠀⠀⠀⠀⠙⣿⡇⠀⠀⠘⠛⠃⠀⠀⢸⣿⠀⠀⠀⣿⣿⠋⠉⠙⣿⣿⣿⡇⠀⠀⢸⣿⣿⣿⣿⣿⠀⠀⠀⢹⣿⣿⡏⠀⠀⠰⠛⠓⠀⠀⠈⣿⡏⠀⠀⠀⡀⠀⠀⠀⠀⢹⣿⡄⠀⠀⠀⠀⠀⠈⢹⣿⣿
-⣿⣿⣿⣿⣶⣶⣤⠀⠀⠀⣿⡇⠀⠀⢀⣀⣀⣀⣤⣿⣿⠀⠀⠀⣿⣿⠀⠀⠀⣿⣿⣿⡇⠀⠀⢸⣿⣿⣿⣿⣿⠀⠀⠀⢹⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⣿⡏⠀⠀⠀⣿⣄⠀⠀⠀⢹⣿⣿⣷⣶⣶⡄⠀⠀⠈⣿⣿
-⣿⣿⠁⠀⠀⠀⠀⠀⠀⢠⣿⡇⠀⠀⢸⣿⣿⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⣿⡇⠀⠀⠀⠀⠀⠀⢸⣿⣿⣿⠀⠀⠀⢹⣿⣿⡇⠀⠀⢸⣿⣿⠀⠀⠀⣿⡏⠀⠀⠀⣿⣿⠂⠀⠀⢹⣿⠀⠀⠀⠀⠀⠀⠀⣸⣿⣿
-⣿⣿⣧⣤⣤⣤⣤⣤⣶⣿⣿⣷⣤⣤⣼⣿⣿⣿⣿⣿⣿⣦⣤⣤⣤⣤⣤⣤⣤⣿⣧⣤⣤⣤⣤⣤⣤⣾⣿⣿⣿⣦⣤⣤⣿⣿⣿⣧⣤⣤⣾⣿⣿⣤⣤⣤⣿⣿⣤⣤⣴⣿⣿⣧⣤⣤⣿⣿⣦⣤⣤⣤⣤⣴⣶⣿⣿⣿
-⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡏
-⠀⠙⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠋⠀
+  ██▌   ▓▓  ▐█████   ▄▄██▄   ▀███████▀  ▐█████  ▐██▄   ▓▓
+  ▓██ ░ ██  ▐█▌     ▐██▀█ ▌▓ ░  ▐█▌  ░  ▐█▌      ▓█▌ ░ ██
+ ▐░█ ▌▐ █▓  ░ ██    ██  ▐██  ░░ ░  ░░░  ░ ██   ░ ░█▌▐▓ █▓
+ ▐█▌██ ▐░▌  ██   ░ ▐██ ░ ██▌ ▒▒ ██ ░░░  ██   ░ ▒▄▐█▄ ▄█▀
+ ░█ ▐░▌▐▒▌ ▐░▌ ░░░ ░░▌▐░ ░█▌ ▒▒▐░▌ ░░  ▐░▌ ░░░ ░ ▄█▀██▄ ▀
+ ▒░  ▒▒▐▓░ ▐▒▌ ▀   ▒▒▌▐ ▐▒█  ▒▓▐▒▌░░░  ▐▒▌ ▀    ▒░ ▄ ██▓░
+▐▓▌░ ▐▓▓█  █▓ ▄▄▓█ █▓  ▄▓█   ▒ █▓ ░░░  █▓ ▄▄▓█ ▐▓▌░░░▐▓█
+▐█▌   ██▓  ▓██▀▀   ██▄██▀▄░    ▓█      ▓██▀▀   ▐█▌ ▀ ▐█▓
 ```
 
-Splitans is a tokenization tool that parses ANSI files and separates text from
-ANSI sequences. The text is saved to a file with the `.neot` extension and the
-control sequences to a file with the `.neos` extension.
+Splitans is a tokenization tool that parses ANSI files and separates ANSI
+sequences from text. You can save the stdout output to a file with the `.neo`
+extension. The `neotex` format is simple: text content on the left, ANSI
+sequences on the right, separated by `|`. The `neotex` format allows you to view
+the content without requiring an ANSI terminal.
 
-It is also possible to export to various formats, such as table or JSON.
+It is also possible to export to various formats, such as ANSI, table, stats or
+JSON.
 
 ## Usage
 
-By default, `splitans` displays the plain text content (without ANSI codes) to
-stdout.
+By default, `splitans` converts UTF-8 ANSI to UTF-8 `neotex` format and outputs
+to stdout.
 
 ```bash
-# Parse a file and display plain text (default behavior)
-./splitans file.ans
+# Convert 16colors to UTF-8 ANSI (terminal)
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F ansi
 
-# Save plain text to a file using output redirection
-./splitans file.ans > output.txt
+# Convert 16colors to UTF-8 ANSI with true VGA colors (disable terminal theme)
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F ansi -v
 
-# Copy to termbin.com
-./splitans file.ans | nc termbin.com 9999
+# Convert 16colors legacy ANSI to neotex
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 > /tmp/WWANS157.neo
+less -S /tmp/WWANS157.neo
 
-# Read from pipe
-cat file.ans | ./splitans
-echo -e "\x1b[31mRed Text\x1b[0m" | ./splitans
+# Convert neotex to ANSI
+./splitans /tmp/WWANS157.neo -f neotex -F ansi
+./splitans /tmp/WWANS157.neo -f neotex -E cp437 -F ansi
 
-# Display tokens in table format
-./splitans -t file.ans
-cat file.ans | ./splitans -t
+# Convert 16colors to UTF-8 plaintext
+./splitans /tmp/WWANS157.neo -f neotex -F plaintext
+cat /tmp/WWANS157.neo | colrm 80
 
-# Export to JSON
-./splitans -j file.ans
+# Copy ANSI to termbin.com
+cat /tmp/WWANS157.neo | ./splitans -f neotex -F ansi | nc termbin.com 9999
+curl -s https://termbin.com/w7sp
 
-# Display statistics
-./splitans -s file.ans
-
-# Export to multiple files (.neot and .neos)
-./splitans -m output_filename file.ans
+# Display ANSI tokens in other formats
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F json
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F table
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F stats
 ```
 
-## MISC
+## Output Examples
 
-### Convert cp437 to plaintext ansi
+Here are the results of the `splitans` commands, in order:
 
-```bash
-./splitans -e cp437 -f ansi  -E cp437 -F plaintext "<FILENAME>" | tr -d '\n' > ansi.ans
-```
+- The `neotex` format
+- The 16-color ANSI format (uses the terminal theme)
+- The true color ANSI format (overrides the terminal theme)
 
-### Test
+![Outputs comparisons](./comparison.png)
 
-#### Check Parsed Correctly
+## Miscellaneous
 
-```bash
-just neopack-all-from-ansi
-```
-
-#### Check output all content
+#### Convert all ANS files to neotex
 
 ```bash
-# ANSI
-echo "" > /tmp/result.txt
-for file in $(find . -name "*.ANS"); do
-    echo -e "Parsing $file"
+# Convert one ANSI file to neotex
+just neotex-from-ansi "<FILENAME>"
 
-    printf "=%.0s" {1..80} >> /tmp/result.txt
-    echo -e "\n== ${file}\n" >> /tmp/result.txt
-    ./splitans -e cp437 -f ansi -E utf8 -F ansi "$file" >> /tmp/result.txt 2>/dev/null
-    echo -e >> /tmp/result.txt
-done
-
-# NEOPACK
-rm -f neopack.neop
-for file in $(find . -name "*.ANS"); do
-   ./splitans -e cp437 -f ansi -E utf8 -F neopack "$file" >> neopack.neop 2>/dev/null
-done
+# Convert all *.ANS files to neotex
+just neotex-all-delete "<PATH>"
+just neotex-all-from-ansi "<PATH>"
 ```
 
 ## Sources
@@ -97,4 +84,4 @@ done
   - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
   - https://ecma-international.org/wp-content/uploads/ECMA-48_5th_edition_june_1991.pdf
 - Logo Font
-  - https://djr.com/bungee
+  - https://n0namen0.github.io/CODEF_Ansi_Logo_Maker/ (VENGANCX)

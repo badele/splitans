@@ -22,13 +22,13 @@ type CLI struct {
 	File string `arg:"" optional:"" type:"path" help:"ANSI file to process (reads from stdin if not specified)"`
 
 	Input struct {
-		Iformat   string `short:"f" default:"ansi" enum:"ansi,json, neotex,neopack" help:"Input format: ansi, json, neotex, neopack"`
-		Iencoding string `short:"e" required:"true" enum:"cp437,cp850,utf8,iso-8859-1" help:"Input encoding: cp437, cp850, utf8, iso-8859-1"`
+		Iformat   string `short:"f" default:"ansi" enum:"ansi,json, neotex" help:"Input format: ansi, json, neotex"`
+		Iencoding string `short:"e" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Input encoding: cp437, cp850, utf8, iso-8859-1"`
 	} `embed:"" prefix:"" group:"Input options:"`
 
 	Output struct {
-		Oformat   string `short:"F" default:"plaintext" enum:"ansi,json,neotex,neopack,plaintext" help:"Output format ansi, json, neotex, neopack, plaintext"`
-		Oencoding string `short:"E" required:"true" enum:"cp437,cp850,utf8,iso-8859-1" help:"Input encoding: cp437, cp850, utf8, iso-8859-1"`
+		Oformat   string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats" help:"Output format: ansi, json, neotex, plaintext, table, stats"`
+		Oencoding string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
 		Save      string `short:"S" type:"path" help:"Save to file (for -oformat option (neotex)"`
 		Width     int    `short:"W" default:80 help:"Width text to specified width"`
 		Lines     int    `short:"L" default:1000 help:"Nb lines text"`
@@ -37,8 +37,6 @@ type CLI struct {
 
 	Debug struct {
 		Debug bool `short:"d" help:"Enable debug mode (displays cursor positions)"`
-		Stats bool `short:"s" help:"Display usage statistics for characters and sequences"`
-		Table bool `short:"t" help:"Display tokens in table format"`
 	} `embed:"" prefix:"" group:"Debug options:"`
 }
 
@@ -175,9 +173,9 @@ func main() {
 	// Convert encoding to UTF-8
 	encoding = cli.Input.Iencoding
 	switch cli.Input.Iformat {
-	case "neotex", "neopack":
+	case "neotex":
 		if cli.Input.Iencoding != "utf8" {
-			fmt.Fprintf(os.Stderr, "Error: --iformat=%s requires --Iencoding=utf8 (neotex and neopack formats are always UTF-8)\n", cli.Input.Iencoding)
+			fmt.Fprintf(os.Stderr, "Error: --iformat=%s requires --Iencoding=utf8 (neotex is always UTF-8)\n", cli.Input.Iencoding)
 			os.Exit(1)
 		}
 		encoding = "utf8"
@@ -205,13 +203,13 @@ func main() {
 			os.Exit(1)
 		}
 
-	case "neopack":
+	case "neotex":
 
-		tok = neotex.NewNeopackTokenizer(data, cli.Output.Width)
+		tok = neotex.NewNeotexTokenizer(data, cli.Output.Width)
 		tokens = tok.Tokenize()
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Neopack parse error: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Neotex parse error: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -228,42 +226,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Display statistics
-	if cli.Debug.Stats {
-		exporter.DisplayStats(tok)
-		return
-	}
-
-	// Display table
-	if cli.Debug.Table {
-		stats := tok.GetStats()
-		if stats.PosFirstBadSequence > 0 {
-			fmt.Printf("=== Parsing file: %s ===\n\n", filename)
-		}
-
-		fmt.Printf("=== %% Parsed %f  ===\n", stats.ParsedPercent)
-
-		if err := exporter.ExportTokensToTable(tokens, os.Stdout); err != nil {
-			fmt.Fprintf(os.Stderr, "Error displaying table: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
 	// Validate --write option usage
 	if cli.Output.Save != "" && cli.Output.Oformat != "neotex" {
 		fmt.Fprintf(os.Stderr, "Error: --write option can only be used with --oformat=neotex\n")
 		os.Exit(1)
 	}
 
-	if cli.Output.Oformat == "neotex" && cli.Output.Save == "" {
-		fmt.Fprintf(os.Stderr, "Error: --oformat=neotex requires --save option to specify output file (.neot and .neos)\n")
-		os.Exit(1)
-	}
+	// if cli.Output.Oformat == "neotex" && cli.Output.Save == "" {
+	// 	fmt.Fprintf(os.Stderr, "Error: --oformat=neotex requires --save option to specify output file (.neot and .neos)\n")
+	// 	os.Exit(1)
+	// }
 
-	// Validate output encoding for neotex/neopack (must be utf8)
-	if (cli.Output.Oformat == "neotex" || cli.Output.Oformat == "neopack") && cli.Output.Oencoding != "utf8" {
-		fmt.Fprintf(os.Stderr, "Error: --oformat=%s requires --Oencoding=utf8 (neotex and neopack formats are always UTF-8)\n", cli.Output.Oformat)
+	// Validate output encoding for neotex (must be utf8)
+	if cli.Output.Oformat == "neotex"  && cli.Output.Oencoding != "utf8" {
+		fmt.Fprintf(os.Stderr, "Error: --oformat=%s requires --Oencoding=utf8 (neotex is always UTF-8)\n", cli.Output.Oformat)
 		os.Exit(1)
 	}
 
@@ -295,6 +271,18 @@ func main() {
 		}
 
 		fmt.Print(string(outputBytes))
+	// case "neotex":
+	// 	// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
+	// 	plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
+	// 	if err != nil {
+	// 		fmt.Fprintf(os.Stderr, "Error generating neotex format: %v\n", err)
+	// 		os.Exit(1)
+	// 	}
+	//
+	// 	if err := exporter.ExportToNeotexFile(cli.Output.Save, plainText, sequenceText); err != nil {
+	// 		fmt.Fprintf(os.Stderr, "Error exporting to neotex file: %v\n", err)
+	// 		os.Exit(1)
+	// 	}
 	case "neotex":
 		// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
 		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
@@ -303,29 +291,27 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err := exporter.ExportToNeotexFile(cli.Output.Save, plainText, sequenceText); err != nil {
-			fmt.Fprintf(os.Stderr, "Error exporting to neotex file: %v\n", err)
-			os.Exit(1)
-		}
-	case "neopack":
-		// Neopack format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
-		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error generating neopack format: %v\n", err)
-			os.Exit(1)
-		}
-
-		metadatas := neotex.ExtractMetadata(strings.Split(sequenceText, "\n"))
-
-		fmt.Printf("=== Neopack Metadata ===\n")
-		fmt.Printf("Version: %d\n", metadatas.Version)
-		fmt.Printf("Trimmed Width: %d\n", metadatas.TrimmedWidth)
+		// metadatas := neotex.ExtractMetadata(strings.Split(sequenceText, "\n"))
 
 		combined := ConcatenateTextAndSequence(plainText, sequenceText, cli.Output.Width, " | ")
 		fmt.Println(combined)
 
 	case "json":
 		exporter.TokensJSON(tok)
+	case "stats":
+		exporter.DisplayStats(tok)
+	case "table":
+		stats := tok.GetStats()
+		if stats.PosFirstBadSequence > 0 {
+			fmt.Printf("=== Parsing file: %s ===\n\n", filename)
+		}
+
+		fmt.Printf("=== %% Parsed %f  ===\n", stats.ParsedPercent)
+
+		if err := exporter.ExportTokensToTable(tokens, os.Stdout); err != nil {
+			fmt.Fprintf(os.Stderr, "Error displaying table: %v\n", err)
+			os.Exit(1)
+		}
 	case "plaintext":
 		plainText, err := exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding)
 		if err != nil {

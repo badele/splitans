@@ -151,23 +151,8 @@ func ApplyNeotexCode(code string, sgr *types.SGR) {
 	}
 }
 
-func NewNeotexTokenizer(textLines []string, seqLines []string) *Tokenizer {
-	return &Tokenizer{
-		textLines: textLines,
-		seqLines:  seqLines,
-		Tokens:    make([]types.Token, 0),
-		Stats: types.TokenStats{
-			TokensByType: make(map[types.TokenType]int),
-			SGRCodes:     make(map[string]int),
-			CSISequences: make(map[string]int),
-			C0Codes:      make(map[byte]int),
-			C1Codes:      make(map[string]int),
-		},
-	}
-}
-
-func NewNeopackTokenizer(data []byte, width int) *Tokenizer {
-	textLines, seqLines := SplitNeopackFormat(width, data)
+func NewNeotexTokenizer(data []byte, width int) *Tokenizer {
+	textLines, seqLines := SplitNeotexFormat(width, data)
 
 	return &Tokenizer{
 		textLines: textLines,
@@ -202,11 +187,11 @@ func parseRGBHex(hexStr string) (r, g, b uint8, err error) {
 	return r, g, b, nil
 }
 
-// SplitNeopackFormat sépare les données neopack en texte et séquences
+// SplitNeotexFormat sépare les données neotex en texte et séquences
 // Format: "texte (80 car) | séquence"
 // Note: width est en nombre de runes (caractères), pas en bytes
 // Retourne des tableaux de lignes pour éviter les \n embeddés
-func SplitNeopackFormat(width int, data []byte) (textLines []string, seqLines []string) {
+func SplitNeotexFormat(width int, data []byte) (textLines []string, seqLines []string) {
 	separator := " | "
 
 	lines := strings.Split(string(data), "\n")

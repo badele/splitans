@@ -2,16 +2,14 @@ package exporter
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"splitans/processor"
 	"splitans/types"
 )
 
-// NeopackVersion is the current version of the neopack format
-const NeopackVersion = 1
+// NeotexVersion is the current version of the neotex format
+const NeotexVersion = 1
 
 // Neotex color codes indexed by ColorValue.Index (0-15)
 // Index 0-7: normal colors (lowercase), Index 8-15: bright colors (uppercase)
@@ -27,11 +25,6 @@ var neotexBgColors = []string{
 // SGRToNeotex converts an types.SGR struct to neotex format strings
 func SGRToNeotex(sgr *types.SGR) []string {
 	codes := []string{}
-
-	// Handle reset
-	// if sgr.Equals(types.NewSGR()) {
-	// 	return []string{"R0"}
-	// }
 
 	// Foreground color
 	switch sgr.FgColor.Type {
@@ -272,7 +265,7 @@ func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
 
 		// Add version metadata on the first line
 		if lineIdx == 0 {
-			lineSeqs = append(lineSeqs, fmt.Sprintf("!V%d", NeopackVersion))
+			lineSeqs = append(lineSeqs, fmt.Sprintf("!V%d", NeotexVersion))
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!TW%d/%d", vt.GetMaxCursorX()+1,vt.GetWidth()))
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!NL%d", vt.GetMaxCursorY()+1))
 		}
@@ -318,72 +311,6 @@ func ExportFlattenedNeotex(width, nblines int, tokens []types.Token) (string, st
 	text, sequences := ExportToNeotex(vt)
 
 	return text, sequences, nil
-}
-
-func ExportToNeotexFile(basePath string, plainText string, plainSequence string) error {
-	basePath = strings.TrimSuffix(basePath, filepath.Ext(basePath))
-
-	neotPath := basePath + ".neot"
-	neosPath := basePath + ".neos"
-
-	textFile, err := os.Create(neotPath)
-	if err != nil {
-		return fmt.Errorf("erreur création fichier .neot: %w", err)
-	}
-	defer textFile.Close()
-
-	sequenceFile, err := os.Create(neosPath)
-	if err != nil {
-		return fmt.Errorf("erreur création fichier .neos: %w", err)
-	}
-	defer sequenceFile.Close()
-
-	_, err = textFile.WriteString(plainText)
-	if err != nil {
-		return fmt.Errorf("erreur écriture dans .neot: %w", err)
-	}
-
-	_, err = sequenceFile.WriteString(plainSequence)
-	if err != nil {
-		return fmt.Errorf("erreur écriture dans .neos: %w", err)
-	}
-
-	return nil
-}
-
-// - .neot : plain text content
-// - .neos : plain sequence content
-// - .neop : plain neotex packed (text + sequence)
-// - .neoi : project information (SAUCE)
-func ExportToNeopackedFile(basePath string, plainText string, plainSequence string) error {
-	basePath = strings.TrimSuffix(basePath, filepath.Ext(basePath))
-
-	neotPath := basePath + ".neot"
-	neosPath := basePath + ".neos"
-
-	textFile, err := os.Create(neotPath)
-	if err != nil {
-		return fmt.Errorf("erreur création fichier .neot: %w", err)
-	}
-	defer textFile.Close()
-
-	sequenceFile, err := os.Create(neosPath)
-	if err != nil {
-		return fmt.Errorf("erreur création fichier .neos: %w", err)
-	}
-	defer sequenceFile.Close()
-
-	_, err = textFile.WriteString(plainText)
-	if err != nil {
-		return fmt.Errorf("erreur écriture dans .neot: %w", err)
-	}
-
-	_, err = sequenceFile.WriteString(plainSequence)
-	if err != nil {
-		return fmt.Errorf("erreur écriture dans .neos: %w", err)
-	}
-
-	return nil
 }
 
 func getTokenTypeName(tokenType types.TokenType) string {

@@ -390,7 +390,7 @@ func (t *Tokenizer) collectParams() []string {
 				t.pos++
 			}
 		} else if b == '?' || b == '>' || b == '!' || b == '$' || b == '\'' || b == '"' || b == ' ' {
-			// Intermediate bytes, on les ignore pour l'ins.neot
+			// Ignore these characters in parameters
 			t.pos++
 		} else {
 			// CSI or SGR Final byte or invalid character

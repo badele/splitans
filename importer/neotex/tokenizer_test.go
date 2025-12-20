@@ -3,748 +3,464 @@ package neotex
 import (
 	"reflect"
 	"testing"
+
+	"splitans/types"
 )
 
-func TestTokenizeText(t *testing.T) {
-	input := []byte("Hello World")
-	tokenizer := NewTokenizer(input)
-	tokens := tokenizer.Tokenize()
-
-	if len(tokens) != 1 {
-		t.Fatalf("Expected 1 token, got %d", len(tokens))
-	}
-
-	if tokens[0].Type != TokenText {
-		t.Errorf("Expected TokenText, got %v", tokens[0].Type)
-	}
-
-	if tokens[0].Value != "Hello World" {
-		t.Errorf("Expected 'Hello World', got %q", tokens[0].Value)
-	}
-}
-
-func TestTokenizeC0(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []byte
-		expected byte
-	}{
-		{"LF", []byte{0x0A}, 0x0A},
-		{"CR", []byte{0x0D}, 0x0D},
-		{"BEL", []byte{0x07}, 0x07},
-		{"HT", []byte{0x09}, 0x09},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer(tt.input)
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
-			}
-
-			if tokens[0].Type != TokenC0 {
-				t.Errorf("Expected TokenC0, got %v", tokens[0].Type)
-			}
-
-			if tokens[0].C0Code != tt.expected {
-				t.Errorf("Expected code 0x%02X, got 0x%02X", tt.expected, tokens[0].C0Code)
-			}
-		})
-	}
-}
-
-func TestTokenizeSGR(t *testing.T) {
-	tests := []struct {
-		name           string
-		input          string
-		expectedParams []string
-	}{
-		{"Reset", "\x1b[0m", []string{"0"}},
-		{"Bold", "\x1b[1m", []string{"1"}},
-		{"Red", "\x1b[31m", []string{"31"}},
-		{"Multiple", "\x1b[1;4;31m", []string{"1", "4", "31"}},
-		{"Palette", "\x1b[38;5;123m", []string{"38", "5", "123"}},
-		{"RGB", "\x1b[38;2;255;100;50m", []string{"38", "2", "255", "100", "50"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer([]byte(tt.input))
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
-			}
-
-			if tokens[0].Type != TokenSGR {
-				t.Errorf("Expected TokenSGR, got %v", tokens[0].Type)
-			}
-
-			if !reflect.DeepEqual(tokens[0].Parameters, tt.expectedParams) {
-				t.Errorf("Expected params %v, got %v", tt.expectedParams, tokens[0].Parameters)
-			}
-		})
-	}
-}
-
-func TestTokenizeCSI(t *testing.T) {
-	tests := []struct {
-		name           string
-		input          string
-		expectedParams []string
-	}{
-		{"CursorPos", "\x1b[10;5H", []string{"10", "5"}},
-		{"CursorUp", "\x1b[5A", []string{"5"}},
-		{"EraseDisplay", "\x1b[2J", []string{"2"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer([]byte(tt.input))
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
-			}
-
-			if tokens[0].Type != TokenCSI {
-				t.Errorf("Expected TokenCSI, got %v", tokens[0].Type)
-			}
-
-			if !reflect.DeepEqual(tokens[0].Parameters, tt.expectedParams) {
-				t.Errorf("Expected params %v, got %v", tt.expectedParams, tokens[0].Parameters)
-			}
-		})
-	}
-}
-
-func TestTokenizeOSC(t *testing.T) {
-	tests := []struct {
-		name           string
-		input          string
-		expectedParams []string
-	}{
-		{"WindowTitle", "\x1b]2;My Title\x07", []string{"2", "My Title"}},
-		{"IconTitle", "\x1b]1;Icon\x1b\\", []string{"1", "Icon"}},
-		{"Both", "\x1b]0;Title\x07", []string{"0", "Title"}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer([]byte(tt.input))
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
-			}
-
-			if tokens[0].Type != TokenOSC {
-				t.Errorf("Expected TokenOSC, got %v", tokens[0].Type)
-			}
-
-			if !reflect.DeepEqual(tokens[0].Parameters, tt.expectedParams) {
-				t.Errorf("Expected params %v, got %v", tt.expectedParams, tokens[0].Parameters)
-			}
-		})
-	}
-}
-
-func TestTokenizeDCS(t *testing.T) {
-	input := "\x1bP1$qm\x1b\\"
-	tokenizer := NewTokenizer([]byte(input))
-	tokens := tokenizer.Tokenize()
-
-	if len(tokens) != 1 {
-		t.Fatalf("Expected 1 token, got %d", len(tokens))
-	}
-
-	if tokens[0].Type != TokenDCS {
-		t.Errorf("Expected TokenDCS, got %v", tokens[0].Type)
-	}
-
-	if tokens[0].Value != "1$qm" {
-		t.Errorf("Expected value '1$qm', got %q", tokens[0].Value)
-	}
-}
-
-func TestTokenizeC1(t *testing.T) {
+func TestSplitNeotexFormat(t *testing.T) {
 	tests := []struct {
 		name         string
-		input        string
-		expectedCode string
+		width        int
+		data         []byte
+		expectedText []string
+		expectedSeq  []string
 	}{
-		{"NEL", "\x1bE", "NEL"},
-		{"IND", "\x1bD", "IND"},
-		{"RI", "\x1bM", "RI"},
-		{"HTS", "\x1bH", "HTS"},
+		{
+			name:         "Single line",
+			width:        5,
+			data:         []byte("Hello | 1:Fr"),
+			expectedText: []string{"Hello"},
+			expectedSeq:  []string{"1:Fr"},
+		},
+		{
+			name:         "Multiple lines",
+			width:        5,
+			data:         []byte("Hello | 1:Fr\nWorld | 1:Fg"),
+			expectedText: []string{"Hello", "World"},
+			expectedSeq:  []string{"1:Fr", "1:Fg"},
+		},
+		{
+			name:         "Unicode text",
+			width:        9,
+			data:         []byte("Héllo àüé | 1:Fr"),
+			expectedText: []string{"Héllo àüé"},
+			expectedSeq:  []string{"1:Fr"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer([]byte(tt.input))
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
+			textLines, seqLines := SplitNeotexFormat(tt.width, tt.data)
+			if !reflect.DeepEqual(textLines, tt.expectedText) {
+				t.Errorf("Text lines: expected %v, got %v", tt.expectedText, textLines)
 			}
-
-			if tokens[0].Type != TokenC1 {
-				t.Errorf("Expected TokenC1, got %v", tokens[0].Type)
-			}
-
-			if tokens[0].C1Code != tt.expectedCode {
-				t.Errorf("Expected code %q, got %q", tt.expectedCode, tokens[0].C1Code)
+			if !reflect.DeepEqual(seqLines, tt.expectedSeq) {
+				t.Errorf("Seq lines: expected %v, got %v", tt.expectedSeq, seqLines)
 			}
 		})
 	}
 }
 
-func TestTokenizeMixed(t *testing.T) {
-	input := "Hello \x1b[31mRed\x1b[0m World"
-	tokenizer := NewTokenizer([]byte(input))
-	tokens := tokenizer.Tokenize()
-
-	if len(tokens) != 5 {
-		t.Fatalf("Expected 5 tokens, got %d", len(tokens))
+func TestApplyNeotexCode(t *testing.T) {
+	tests := []struct {
+		name       string
+		code       string
+		checkFn    func(*types.SGR) bool
+		checkDesc  string
+	}{
+		// Foreground colors (lowercase = standard 0-7)
+		{
+			name: "Foreground Black",
+			code: "Fk",
+			checkFn: func(s *types.SGR) bool {
+				return s.FgColor.Type == types.ColorStandard && s.FgColor.Index == 0
+			},
+			checkDesc: "FgColor should be standard index 0",
+		},
+		{
+			name: "Foreground Red",
+			code: "Fr",
+			checkFn: func(s *types.SGR) bool {
+				return s.FgColor.Type == types.ColorStandard && s.FgColor.Index == 1
+			},
+			checkDesc: "FgColor should be standard index 1",
+		},
+		{
+			name: "Foreground Green",
+			code: "Fg",
+			checkFn: func(s *types.SGR) bool {
+				return s.FgColor.Type == types.ColorStandard && s.FgColor.Index == 2
+			},
+			checkDesc: "FgColor should be standard index 2",
+		},
+		// Foreground colors (uppercase = bright 8-15)
+		{
+			name: "Foreground Bright Red",
+			code: "FR",
+			checkFn: func(s *types.SGR) bool {
+				return s.FgColor.Type == types.ColorStandard && s.FgColor.Index == 9
+			},
+			checkDesc: "FgColor should be standard index 9 (bright red)",
+		},
+		// Background colors
+		{
+			name: "Background Black",
+			code: "Bk",
+			checkFn: func(s *types.SGR) bool {
+				return s.BgColor.Type == types.ColorStandard && s.BgColor.Index == 0
+			},
+			checkDesc: "BgColor should be standard index 0",
+		},
+		{
+			name: "Background Red",
+			code: "Br",
+			checkFn: func(s *types.SGR) bool {
+				return s.BgColor.Type == types.ColorStandard && s.BgColor.Index == 1
+			},
+			checkDesc: "BgColor should be standard index 1",
+		},
+		// Effects
+		{
+			name: "Dim ON",
+			code: "EM",
+			checkFn: func(s *types.SGR) bool {
+				return s.Dim == true
+			},
+			checkDesc: "Dim should be true",
+		},
+		{
+			name: "Dim OFF",
+			code: "Em",
+			checkFn: func(s *types.SGR) bool {
+				return s.Dim == false
+			},
+			checkDesc: "Dim should be false",
+		},
+		{
+			name: "Italic ON",
+			code: "EI",
+			checkFn: func(s *types.SGR) bool {
+				return s.Italic == true
+			},
+			checkDesc: "Italic should be true",
+		},
+		{
+			name: "Underline ON",
+			code: "EU",
+			checkFn: func(s *types.SGR) bool {
+				return s.Underline == true
+			},
+			checkDesc: "Underline should be true",
+		},
+		{
+			name: "Blink ON",
+			code: "EB",
+			checkFn: func(s *types.SGR) bool {
+				return s.Blink == true
+			},
+			checkDesc: "Blink should be true",
+		},
+		{
+			name: "Reverse ON",
+			code: "ER",
+			checkFn: func(s *types.SGR) bool {
+				return s.Reverse == true
+			},
+			checkDesc: "Reverse should be true",
+		},
+		// RGB colors
+		{
+			name: "Foreground RGB",
+			code: "FFF0080",
+			checkFn: func(s *types.SGR) bool {
+				return s.FgColor.Type == types.ColorRGB &&
+					s.FgColor.R == 255 && s.FgColor.G == 0 && s.FgColor.B == 128
+			},
+			checkDesc: "FgColor should be RGB(255, 0, 128)",
+		},
+		{
+			name: "Background RGB",
+			code: "B00FF00",
+			checkFn: func(s *types.SGR) bool {
+				return s.BgColor.Type == types.ColorRGB &&
+					s.BgColor.R == 0 && s.BgColor.G == 255 && s.BgColor.B == 0
+			},
+			checkDesc: "BgColor should be RGB(0, 255, 0)",
+		},
+		// Indexed colors
+		{
+			name: "Foreground Indexed",
+			code: "F123",
+			checkFn: func(s *types.SGR) bool {
+				return s.FgColor.Type == types.ColorIndexed && s.FgColor.Index == 123
+			},
+			checkDesc: "FgColor should be indexed 123",
+		},
+		{
+			name: "Background Indexed",
+			code: "B200",
+			checkFn: func(s *types.SGR) bool {
+				return s.BgColor.Type == types.ColorIndexed && s.BgColor.Index == 200
+			},
+			checkDesc: "BgColor should be indexed 200",
+		},
 	}
 
-	// Token 1: "Hello "
-	if tokens[0].Type != TokenText || tokens[0].Value != "Hello " {
-		t.Errorf("Token 1: expected text 'Hello ', got %v", tokens[0])
-	}
-
-	// Token 2: SGR [31m
-	if tokens[1].Type != TokenSGR {
-		t.Errorf("Token 2: expected SGR, got %v", tokens[1].Type)
-	}
-
-	// Token 3: "Red"
-	if tokens[2].Type != TokenText || tokens[2].Value != "Red" {
-		t.Errorf("Token 3: expected text 'Red', got %v", tokens[2])
-	}
-
-	// Token 4: SGR [0m
-	if tokens[3].Type != TokenSGR {
-		t.Errorf("Token 4: expected SGR, got %v", tokens[3].Type)
-	}
-
-	// Token 5: " World"
-	if tokens[4].Type != TokenText || tokens[4].Value != " World" {
-		t.Errorf("Token 5: expected text ' World', got %v", tokens[4])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sgr := types.NewSGR()
+			ApplyNeotexCode(tt.code, sgr)
+			if !tt.checkFn(sgr) {
+				t.Errorf("ApplyNeotexCode(%q): %s", tt.code, tt.checkDesc)
+			}
+		})
 	}
 }
 
-func TestParseSGRParams(t *testing.T) {
+func TestApplyNeotexCodeReset(t *testing.T) {
+	sgr := types.NewSGR()
+	// Set some values
+	ApplyNeotexCode("Fr", sgr)
+	ApplyNeotexCode("EU", sgr)
+
+	// Verify they are set
+	if sgr.FgColor.Index != 1 {
+		t.Error("FgColor should be red before reset")
+	}
+	if !sgr.Underline {
+		t.Error("Underline should be true before reset")
+	}
+
+	// Reset
+	ApplyNeotexCode("R0", sgr)
+
+	// Verify reset
+	if sgr.FgColor.Type != types.ColorStandard || sgr.FgColor.Index != 7 {
+		t.Errorf("FgColor should be default (7) after reset, got %d", sgr.FgColor.Index)
+	}
+	if sgr.Underline {
+		t.Error("Underline should be false after reset")
+	}
+}
+
+func TestExtractMetadata(t *testing.T) {
 	tests := []struct {
 		name     string
-		params   []string
-		expected []string
+		seqLines []string
+		expected NeotexMetadata
 	}{
 		{
-			name:     "Reset",
-			params:   []string{"0"},
-			expected: []string{"Reset"},
+			name:     "Version only",
+			seqLines: []string{"!V1"},
+			expected: NeotexMetadata{
+				Version: 1,
+				Extra:   make(map[string]string),
+			},
 		},
 		{
-			name:     "Bold Red",
-			params:   []string{"1", "31"},
-			expected: []string{"Bold", "ForegroundRed"},
+			name:     "Trimmed width with total",
+			seqLines: []string{"!TW73/80"},
+			expected: NeotexMetadata{
+				TrimmedWidth: 73,
+				Width:        80,
+				Extra:        make(map[string]string),
+			},
 		},
 		{
-			name:     "Palette",
-			params:   []string{"38", "5", "123"},
-			expected: []string{"Foreground Palette Index: 123"},
+			name:     "Number of lines",
+			seqLines: []string{"!NL42"},
+			expected: NeotexMetadata{
+				NbLines: 42,
+				Extra:   make(map[string]string),
+			},
 		},
 		{
-			name:     "RGB",
-			params:   []string{"38", "2", "255", "100", "50"},
-			expected: []string{"Foreground RGB: 255,100,50"},
+			name:     "Multiple metadata",
+			seqLines: []string{"!V1; !TW73/80; !NL42"},
+			expected: NeotexMetadata{
+				Version:      1,
+				TrimmedWidth: 73,
+				Width:        80,
+				NbLines:      42,
+				Extra:        make(map[string]string),
+			},
 		},
 		{
-			name:     "Background RGB",
-			params:   []string{"48", "2", "128", "64", "32"},
-			expected: []string{"Background RGB: 128,64,32"},
+			name:     "Mixed with sequences",
+			seqLines: []string{"1:Fr; !V1", "2:Fg"},
+			expected: NeotexMetadata{
+				Version: 1,
+				Extra:   make(map[string]string),
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ParseSGRParams(tt.params)
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("Expected %v, got %v", tt.expected, result)
+			meta := ExtractMetadata(tt.seqLines)
+			if meta.Version != tt.expected.Version {
+				t.Errorf("Version: expected %d, got %d", tt.expected.Version, meta.Version)
+			}
+			if meta.TrimmedWidth != tt.expected.TrimmedWidth {
+				t.Errorf("TrimmedWidth: expected %d, got %d", tt.expected.TrimmedWidth, meta.TrimmedWidth)
+			}
+			if meta.Width != tt.expected.Width {
+				t.Errorf("Width: expected %d, got %d", tt.expected.Width, meta.Width)
+			}
+			if meta.NbLines != tt.expected.NbLines {
+				t.Errorf("NbLines: expected %d, got %d", tt.expected.NbLines, meta.NbLines)
 			}
 		})
 	}
 }
 
-func TestParseEDParams(t *testing.T) {
-	tests := []struct {
-		name     string
-		params   []string
-		expected []string
-	}{
-		{
-			name:     "Default (EraseBelow)",
-			params:   []string{""},
-			expected: []string{"EraseBelow"},
-		},
-		{
-			name:     "EraseBelow",
-			params:   []string{"0"},
-			expected: []string{"EraseBelow"},
-		},
-		{
-			name:     "EraseAbove",
-			params:   []string{"1"},
-			expected: []string{"EraseAbove"},
-		},
-		{
-			name:     "EraseAll",
-			params:   []string{"2"},
-			expected: []string{"EraseAll"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ParseEDParams(tt.params)
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("Expected %v, got %v", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestParseNumberParam(t *testing.T) {
-	tests := []struct {
-		name         string
-		param        string
-		defaultValue int
-		expected     int
-	}{
-		{"Empty string returns default", "", 10, 10},
-		{"Valid number", "5", 10, 5},
-		{"Invalid number returns default", "abc", 10, 10},
-		{"Zero", "0", 10, 0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ParseNumberParam(tt.param, tt.defaultValue)
-			if result != tt.expected {
-				t.Errorf("Expected %d, got %d", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestParseDoubleNumbersParam(t *testing.T) {
-	tests := []struct {
-		name         string
-		params       []string
-		defaultValue []int
-		expected     []int
-	}{
-		{
-			name:         "Two valid numbers",
-			params:       []string{"10", "5"},
-			defaultValue: []int{1, 1},
-			expected:     []int{10, 5},
-		},
-		{
-			name:         "Empty params returns default",
-			params:       []string{},
-			defaultValue: []int{1, 1},
-			expected:     []int{1, 1},
-		},
-		{
-			name:         "Invalid number returns default",
-			params:       []string{"abc", "5"},
-			defaultValue: []int{1, 1},
-			expected:     []int{1, 1},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ParseDoubleNumbersParam(tt.params, tt.defaultValue)
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("Expected %v, got %v", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestCSIWithSignification(t *testing.T) {
-	tests := []struct {
-		name                  string
-		input                 string
-		expectedType          TokenType
-		expectedNotation      string
-		expectedSignification string
-	}{
-		{
-			name:                  "Cursor Up",
-			input:                 "\x1b[5A",
-			expectedType:          TokenCSI,
-			expectedNotation:      "CSI Ps A",
-			expectedSignification: "Cursor Up 5 times",
-		},
-		{
-			name:                  "Cursor Down",
-			input:                 "\x1b[3B",
-			expectedType:          TokenCSI,
-			expectedNotation:      "CSI Ps B",
-			expectedSignification: "Cursor Down 3 times",
-		},
-		{
-			name:                  "Cursor Right",
-			input:                 "\x1b[2C",
-			expectedType:          TokenCSI,
-			expectedNotation:      "CSI Ps C",
-			expectedSignification: "Cursor Right 2 times",
-		},
-		{
-			name:                  "Cursor Left",
-			input:                 "\x1b[4D",
-			expectedType:          TokenCSI,
-			expectedNotation:      "CSI Ps D",
-			expectedSignification: "Cursor Left 4 times",
-		},
-		{
-			name:                  "Erase Display",
-			input:                 "\x1b[2J",
-			expectedType:          TokenCSI,
-			expectedNotation:      "CSI Ps J",
-			expectedSignification: "EraseAll",
-		},
-		{
-			name:                  "Save Cursor Position",
-			input:                 "\x1b[s",
-			expectedType:          TokenCSI,
-			expectedNotation:      "CSI s",
-			expectedSignification: "Save Cursor Position",
-		},
-		{
-			name:                  "Restore Cursor Position",
-			input:                 "\x1b[u",
-			expectedType:          TokenCSI,
-			expectedNotation:      "CSI u",
-			expectedSignification: "Restore Cursor Position",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer([]byte(tt.input))
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
-			}
-
-			token := tokens[0]
-
-			if token.Type != tt.expectedType {
-				t.Errorf("Expected type %v, got %v", tt.expectedType, token.Type)
-			}
-
-			if token.CSINotation != tt.expectedNotation {
-				t.Errorf("Expected notation %q, got %q", tt.expectedNotation, token.CSINotation)
-			}
-
-			if token.Signification != tt.expectedSignification {
-				t.Errorf("Expected signification %q, got %q", tt.expectedSignification, token.Signification)
-			}
-		})
-	}
-}
-
-func TestTokenUnknown(t *testing.T) {
-	// Test d'une séquence CSI non reconnue
-	input := "\x1b[99Z"
-	tokenizer := NewTokenizer([]byte(input))
-	tokens := tokenizer.Tokenize()
-
-	if len(tokens) != 1 {
-		t.Fatalf("Expected 1 token, got %d", len(tokens))
-	}
-
-	if tokens[0].Type != TokenUnknown {
-		t.Errorf("Expected TokenUnknown, got %v", tokens[0].Type)
-	}
-}
-
-func TestCSIWithoutParameters(t *testing.T) {
-	tests := []struct {
-		name             string
-		input            string
-		expectedType     TokenType
-		expectedNotation string
-	}{
-		{
-			name:             "Cursor Up without params",
-			input:            "\x1b[A",
-			expectedType:     TokenCSI,
-			expectedNotation: "CSI Ps A",
-		},
-		{
-			name:             "Cursor Down without params",
-			input:            "\x1b[B",
-			expectedType:     TokenCSI,
-			expectedNotation: "CSI Ps B",
-		},
-		{
-			name:             "Cursor Right without params",
-			input:            "\x1b[C",
-			expectedType:     TokenCSI,
-			expectedNotation: "CSI Ps C",
-		},
-		{
-			name:             "Cursor Left without params",
-			input:            "\x1b[D",
-			expectedType:     TokenCSI,
-			expectedNotation: "CSI Ps D",
-		},
-		{
-			name:             "Erase Display without params",
-			input:            "\x1b[J",
-			expectedType:     TokenCSI,
-			expectedNotation: "CSI Ps J",
-		},
-		{
-			name:             "Cursor Position without params",
-			input:            "\x1b[H",
-			expectedType:     TokenCSI,
-			expectedNotation: "CSI Ps H",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer([]byte(tt.input))
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
-			}
-
-			token := tokens[0]
-
-			if token.Type != tt.expectedType {
-				t.Errorf("Expected type %v, got %v", tt.expectedType, token.Type)
-			}
-
-			if token.CSINotation != tt.expectedNotation {
-				t.Errorf("Expected notation %q, got %q", tt.expectedNotation, token.CSINotation)
-			}
-
-			// Vérifie que ça ne panic pas et que la signification est vide ou par défaut
-			// (pas de panic = test réussi)
-		})
-	}
-}
-
-func TestTokenCSIInterrupted(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		c0Char   byte
-		expected string
-	}{
-		{
-			name:     "CSI interrupted by LF",
-			input:    "\x1b[5\x0A",
-			c0Char:   0x0A,
-			expected: "CSI interrupted by C0 control (0x0A)",
-		},
-		{
-			name:     "CSI interrupted by CR",
-			input:    "\x1b[10;5\x0D",
-			c0Char:   0x0D,
-			expected: "CSI interrupted by C0 control (0x0D)",
-		},
-		{
-			name:     "CSI interrupted by BEL",
-			input:    "\x1b[2\x07",
-			c0Char:   0x07,
-			expected: "CSI interrupted by C0 control (0x07)",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tokenizer := NewTokenizer([]byte(tt.input))
-			tokens := tokenizer.Tokenize()
-
-			if len(tokens) != 1 {
-				t.Fatalf("Expected 1 token, got %d", len(tokens))
-			}
-
-			token := tokens[0]
-
-			if token.Type != TokenCSIInterupted {
-				t.Errorf("Expected TokenCSIInterupted, got %v", token.Type)
-			}
-
-			if token.CSINotation != tt.expected {
-				t.Errorf("Expected notation %q, got %q", tt.expected, token.CSINotation)
-			}
-
-			if tokenizer.PosFirstBadSequence == 0 {
-				t.Error("Expected PosFirstBadSequence to be set")
-			}
-
-			if tokenizer.ParsedPercent == 0 {
-				t.Error("Expected ParsedPercent to be calculated")
-			}
-		})
-	}
-}
-
-func TestTokenTypeString(t *testing.T) {
-	tests := []struct {
-		tokenType TokenType
-		expected  string
-	}{
-		{TokenText, "TokenText"},
-		{TokenC0, "TokenC0"},
-		{TokenC1, "TokenC1"},
-		{TokenCSI, "TokenCSI"},
-		{TokenCSIInterupted, "TokenCSIInterupted"},
-		{TokenSGR, "TokenSGR"},
-		{TokenDCS, "TokenDCS"},
-		{TokenOSC, "TokenOSC"},
-		{TokenEscape, "TokenEscape"},
-		{TokenUnknown, "TokenUnknown"},
-		{TokenType(999), "TokenType(999)"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			result := tt.tokenType.String()
-			if result != tt.expected {
-				t.Errorf("Expected %q, got %q", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestTokenString(t *testing.T) {
-	tests := []struct {
-		name     string
-		token    Token
-		expected string
-	}{
-		{
-			name:     "Text token",
-			token:    Token{Type: TokenText, Value: "Hello"},
-			expected: "TEXT: Hello",
-		},
-		{
-			name:     "C0 token - LF",
-			token:    Token{Type: TokenC0, C0Code: 0x0A},
-			expected: "C0: LF",
-		},
-		{
-			name:     "C0 token - unknown",
-			token:    Token{Type: TokenC0, C0Code: 0xFF},
-			expected: "C0: unknown",
-		},
-		{
-			name:     "C1 token",
-			token:    Token{Type: TokenC1, C1Code: "NEL"},
-			expected: "C1: NEL",
-		},
-		{
-			name:     "CSI token",
-			token:    Token{Type: TokenCSI, CSINotation: "CSI Ps A"},
-			expected: "CSI:  Notation:CSI Ps A",
-		},
-		{
-			name:     "SGR token",
-			token:    Token{Type: TokenSGR, CSINotation: "CSI Ps... m"},
-			expected: "SGR:  Notation:CSI Ps... m",
-		},
-		{
-			name:     "DCS token",
-			token:    Token{Type: TokenDCS, Raw: "\x1bP1$qm\x1b\\"},
-			expected: "DCS: \x1bP1$qm\x1b\\",
-		},
-		{
-			name:     "OSC token",
-			token:    Token{Type: TokenOSC, Raw: "\x1b]2;Title\x07"},
-			expected: "OSC: \x1b]2;Title\x07",
-		},
-		{
-			name:     "Escape token",
-			token:    Token{Type: TokenEscape, Raw: "\x1bc"},
-			expected: "ESC: \x1bc",
-		},
-		{
-			name:     "Unknown token",
-			token:    Token{Type: TokenUnknown},
-			expected: "UNKNOWN",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.token.String()
-			if result != tt.expected {
-				t.Errorf("Expected %q, got %q", tt.expected, result)
-			}
-		})
-	}
-}
-
-func TestTokenTypeJSON(t *testing.T) {
+func TestConvertNeotexToANSI(t *testing.T) {
 	tests := []struct {
 		name      string
-		tokenType TokenType
-		expected  string
+		textLines []string
+		seqLines  []string
+		contains  []string // Strings that should be in the output
 	}{
-		{"TokenText", TokenText, `"TokenText"`},
-		{"TokenC0", TokenC0, `"TokenC0"`},
-		{"TokenCSI", TokenCSI, `"TokenCSI"`},
-		{"TokenSGR", TokenSGR, `"TokenSGR"`},
+		{
+			name:      "Simple text no styles",
+			textLines: []string{"Hello"},
+			seqLines:  []string{""},
+			contains:  []string{"Hello"},
+		},
+		{
+			name:      "Text with foreground color",
+			textLines: []string{"Hello"},
+			seqLines:  []string{"1:Fr"},
+			contains:  []string{"Hello", "\x1b["},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := tt.tokenType.MarshalJSON()
-			if err != nil {
-				t.Fatalf("MarshalJSON error: %v", err)
-			}
-
-			if string(data) != tt.expected {
-				t.Errorf("Expected %q, got %q", tt.expected, string(data))
-			}
-
-			var tokenType TokenType
-			err = tokenType.UnmarshalJSON(data)
-			if err != nil {
-				t.Fatalf("UnmarshalJSON error: %v", err)
-			}
-
-			if tokenType != tt.tokenType {
-				t.Errorf("Expected %v, got %v", tt.tokenType, tokenType)
+			result := ConvertNeotexToANSI(tt.textLines, tt.seqLines)
+			resultStr := string(result)
+			for _, s := range tt.contains {
+				if !contains(resultStr, s) {
+					t.Errorf("Expected output to contain %q, got %q", s, resultStr)
+				}
 			}
 		})
 	}
 }
 
-func TestTokenTypeUnmarshalJSON_Invalid(t *testing.T) {
-	var tokenType TokenType
-	err := tokenType.UnmarshalJSON([]byte(`"InvalidType"`))
-	if err == nil {
-		t.Error("Expected error for invalid token type")
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
+}
+
+func findSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestNewNeotexTokenizer(t *testing.T) {
+	// Test basic tokenizer creation
+	data := []byte("Hello | 1:Fr")
+	tokenizer := NewNeotexTokenizer(data, 5)
+
+	if tokenizer == nil {
+		t.Fatal("NewNeotexTokenizer returned nil")
 	}
 
-	err = tokenType.UnmarshalJSON([]byte(`invalid json`))
-	if err == nil {
-		t.Error("Expected error for invalid JSON")
+	tokens := tokenizer.Tokenize()
+	if len(tokens) == 0 {
+		t.Error("Expected at least one token")
+	}
+}
+
+func TestTokenizerWithMultipleStyles(t *testing.T) {
+	// Test with multiple style changes
+	data := []byte("RedGreen | 1:Fr; 4:Fg")
+	tokenizer := NewNeotexTokenizer(data, 8)
+
+	tokens := tokenizer.Tokenize()
+
+	// Should have tokens for text and SGR
+	hasText := false
+	hasSGR := false
+	for _, token := range tokens {
+		if token.Type == types.TokenText {
+			hasText = true
+		}
+		if token.Type == types.TokenSGR {
+			hasSGR = true
+		}
+	}
+
+	if !hasText {
+		t.Error("Expected at least one text token")
+	}
+	if !hasSGR {
+		t.Error("Expected at least one SGR token")
+	}
+}
+
+func TestTokenizerGetStats(t *testing.T) {
+	data := []byte("Hello | 1:Fr")
+	tokenizer := NewNeotexTokenizer(data, 5)
+	tokenizer.Tokenize()
+
+	stats := tokenizer.GetStats()
+	if stats.TotalTokens == 0 {
+		t.Error("Expected TotalTokens to be set after tokenization")
+	}
+}
+
+func TestParseLineSequences(t *testing.T) {
+	tests := []struct {
+		name     string
+		seqLine  string
+		expected []styleChange
+	}{
+		{
+			name:    "Empty",
+			seqLine: "",
+			expected: []styleChange{},
+		},
+		{
+			name:    "Single style",
+			seqLine: "1:Fr",
+			expected: []styleChange{
+				{position: 0, codes: []string{"Fr"}},
+			},
+		},
+		{
+			name:    "Multiple styles same position",
+			seqLine: "1:Fr, EU",
+			expected: []styleChange{
+				{position: 0, codes: []string{"Fr", "EU"}},
+			},
+		},
+		{
+			name:    "Multiple positions",
+			seqLine: "1:Fr; 5:Fg",
+			expected: []styleChange{
+				{position: 0, codes: []string{"Fr"}},
+				{position: 4, codes: []string{"Fg"}},
+			},
+		},
+		{
+			name:    "Skip metadata",
+			seqLine: "!V1; 1:Fr",
+			expected: []styleChange{
+				{position: 0, codes: []string{"Fr"}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseLineSequences(tt.seqLine)
+			if len(result) != len(tt.expected) {
+				t.Fatalf("Expected %d style changes, got %d", len(tt.expected), len(result))
+			}
+			for i, expected := range tt.expected {
+				if result[i].position != expected.position {
+					t.Errorf("Position %d: expected %d, got %d", i, expected.position, result[i].position)
+				}
+				if !reflect.DeepEqual(result[i].codes, expected.codes) {
+					t.Errorf("Codes %d: expected %v, got %v", i, expected.codes, result[i].codes)
+				}
+			}
+		})
 	}
 }

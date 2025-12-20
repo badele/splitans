@@ -4,6 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+
+    godown.url = "github:badele/godown";
+    gosect.url = "github:badele/gosect";
   };
 
   outputs =
@@ -11,6 +14,8 @@
       self,
       nixpkgs,
       flake-utils,
+      godown,
+      gosect,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -23,7 +28,7 @@
           # x-release-please-end
           src = ./.;
 
-          vendorHash = null;
+          vendorHash = "sha256-vRiTPiqMLub20tgK6WYUNMAD7W+4priaJ9KrkOsCick=";
 
           meta = with pkgs.lib; {
             description = "A tool for Parsing ANSI/ASCII file and split text and CSI Sequence";
@@ -50,6 +55,12 @@
             # Build tools
             just
 
+            # ANSI tools
+            ansilove
+            bit
+            cfonts
+            termshot
+
             # Pre-commit hooks
             pre-commit
 
@@ -57,6 +68,8 @@
             hadolint
 
             splitans
+            godown.packages.${system}.default
+            gosect.packages.${system}.default
           ];
 
           shellHook = ''

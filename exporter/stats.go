@@ -17,7 +17,7 @@ func DisplayStats(tok types.TokenizerWithStats) {
 	stats := tok.GetStats()
 	var typeCounts []typeCount
 
-	fmt.Println("=== Token Statistics ===\n")
+	fmt.Println("=== Token Statistics ===")
 	fmt.Printf("  File size: %d bytes\n", stats.FileSize)
 	fmt.Printf("  Total tokens: %d\n", stats.TotalTokens)
 

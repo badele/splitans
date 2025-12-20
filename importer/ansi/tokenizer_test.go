@@ -611,17 +611,17 @@ func TestTokenTypeString(t *testing.T) {
 		tokenType types.TokenType
 		expected  string
 	}{
-		{types.TokenText, "types.TokenText"},
-		{types.TokenC0, "types.TokenC0"},
-		{types.TokenC1, "types.TokenC1"},
-		{types.TokenCSI, "types.TokenCSI"},
-		{types.TokenCSIInterupted, "types.TokenCSIInterupted"},
-		{types.TokenSGR, "types.TokenSGR"},
-		{types.TokenDCS, "types.TokenDCS"},
-		{types.TokenOSC, "types.TokenOSC"},
-		{types.TokenEscape, "types.TokenEscape"},
-		{types.TokenUnknown, "types.TokenUnknown"},
-		{types.TokenType(999), "types.TokenType(999)"},
+		{types.TokenText, "TokenText"},
+		{types.TokenC0, "TokenC0"},
+		{types.TokenC1, "TokenC1"},
+		{types.TokenCSI, "TokenCSI"},
+		{types.TokenCSIInterupted, "TokenCSIInterupted"},
+		{types.TokenSGR, "TokenSGR"},
+		{types.TokenDCS, "TokenDCS"},
+		{types.TokenOSC, "TokenOSC"},
+		{types.TokenEscape, "TokenEscape"},
+		{types.TokenUnknown, "TokenUnknown"},
+		{types.TokenType(999), "TokenType(999)"},
 	}
 
 	for _, tt := range tests {
@@ -637,7 +637,7 @@ func TestTokenTypeString(t *testing.T) {
 func TestTokenString(t *testing.T) {
 	tests := []struct {
 		name     string
-		token    Token
+		token    types.Token
 		expected string
 	}{
 		{
@@ -708,10 +708,10 @@ func TestTokenTypeJSON(t *testing.T) {
 		tokenType types.TokenType
 		expected  string
 	}{
-		{"types.TokenText", types.TokenText, `"types.TokenText"`},
-		{"types.TokenC0", types.TokenC0, `"types.TokenC0"`},
-		{"types.TokenCSI", types.TokenCSI, `"types.TokenCSI"`},
-		{"types.TokenSGR", types.TokenSGR, `"types.TokenSGR"`},
+		{"TokenText", types.TokenText, `"TokenText"`},
+		{"TokenC0", types.TokenC0, `"TokenC0"`},
+		{"TokenCSI", types.TokenCSI, `"TokenCSI"`},
+		{"TokenSGR", types.TokenSGR, `"TokenSGR"`},
 	}
 
 	for _, tt := range tests {

@@ -8,8 +8,8 @@ import (
 	"splitans/types"
 )
 
-// NeopackMetadata contains metadata extracted from neopack format
-type NeopackMetadata struct {
+// NeotexMetadata contains metadata extracted from neotex format
+type NeotexMetadata struct {
 	Version      int               // Format version (!V1 = 1)
 	TrimmedWidth int               // Trimmed width (!TW73/80 -> 73)
 	Width        int               // Total width (!TW73/80 -> 80)
@@ -19,8 +19,8 @@ type NeopackMetadata struct {
 
 // ExtractMetadata extracts metadata from sequence lines
 // Metadata entries start with '!' (e.g., !V1 for version)
-func ExtractMetadata(seqLines []string) NeopackMetadata {
-	meta := NeopackMetadata{
+func ExtractMetadata(seqLines []string) NeotexMetadata {
+	meta := NeotexMetadata{
 		Version: 0, // 0 means no version found (legacy format)
 		Extra:   make(map[string]string),
 	}

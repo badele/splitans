@@ -18,14 +18,14 @@ type Cell struct {
 }
 
 type VirtualTerminal struct {
-	buffer     [][]Cell
-	width      int
-	height     int
-	cursorX    int
-	cursorY    int
-	maxCursorX int
-	maxCursorY int
-	currentSGR *types.SGR
+	buffer         [][]Cell
+	width          int
+	height         int
+	cursorX        int
+	cursorY        int
+	maxCursorX     int
+	maxCursorY     int
+	currentSGR     *types.SGR
 	savedCursorX   int
 	savedCursorY   int
 	outputEncoding string
@@ -99,7 +99,6 @@ func (vt *VirtualTerminal) applyToken(token types.Token) error {
 	return nil
 }
 
-
 func (vt *VirtualTerminal) writeText(text string) {
 	for _, r := range text {
 		if vt.debugCursor {
@@ -159,7 +158,6 @@ func (vt *VirtualTerminal) handleC0(code byte) {
 			vt.cursorY = vt.height - 1
 		}
 		vt.cursorX = 0
-
 
 	case 0x0D: // CR (Carriage Return)
 		vt.cursorX = 0

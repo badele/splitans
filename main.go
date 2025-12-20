@@ -238,7 +238,7 @@ func main() {
 	// }
 
 	// Validate output encoding for neotex (must be utf8)
-	if cli.Output.Oformat == "neotex"  && cli.Output.Oencoding != "utf8" {
+	if cli.Output.Oformat == "neotex" && cli.Output.Oencoding != "utf8" {
 		fmt.Fprintf(os.Stderr, "Error: --oformat=%s requires --Oencoding=utf8 (neotex is always UTF-8)\n", cli.Output.Oformat)
 		os.Exit(1)
 	}

@@ -15,7 +15,7 @@ go-init:
 
 # build project
 [group('golang')]
-@go-fix: 
+@go-fix:
   go mod tidy
   go mod vendor
 
@@ -97,8 +97,8 @@ ansi-all-to-one-png PATH:
   ./splitans -f neotex -F ansi /tmp/WWANS157.neo > /tmp/WWANS157.ans 2>&1
   reset
   cat /tmp/WWANS157.neo | pr -m -t -w 130
-  ./splitans -f neotex -F ansi  /tmp/WWANS157.neo 
-  ./splitans -f neotex -F ansi -v /tmp/WWANS157.neo 
+  ./splitans -f neotex -F ansi  /tmp/WWANS157.neo
+  ./splitans -f neotex -F ansi -v /tmp/WWANS157.neo
 
 # Previous README markdown
 [group('doc')]

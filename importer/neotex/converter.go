@@ -43,7 +43,7 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 				}
 				continue
 			}
-			
+
 			// Check trimmed width TW<trimmed>/<total> or TW<number>
 			if strings.HasPrefix(entry, "TW") {
 				twValue := entry[2:]
@@ -55,7 +55,7 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 					if v, err := strconv.Atoi(parts[1]); err == nil {
 						meta.Width = v
 					}
-				} 
+				}
 				continue
 			}
 

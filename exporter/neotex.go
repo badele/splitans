@@ -266,7 +266,7 @@ func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
 		// Add version metadata on the first line
 		if lineIdx == 0 {
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!V%d", NeotexVersion))
-			lineSeqs = append(lineSeqs, fmt.Sprintf("!TW%d/%d", vt.GetMaxCursorX()+1,vt.GetWidth()))
+			lineSeqs = append(lineSeqs, fmt.Sprintf("!TW%d/%d", vt.GetMaxCursorX()+1, vt.GetWidth()))
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!NL%d", vt.GetMaxCursorY()+1))
 		}
 

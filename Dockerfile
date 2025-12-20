@@ -13,8 +13,10 @@ RUN go mod download
 
 # Copy source code
 COPY *.go ./
+COPY importer ./importer
 COPY exporter ./exporter
-COPY tokenizer ./tokenizer
+COPY processor ./processor
+COPY types ./types
 
 # Compile application
 RUN CGO_ENABLED=0 GOOS=linux go build -o splitans .

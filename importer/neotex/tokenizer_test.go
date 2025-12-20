@@ -53,10 +53,10 @@ func TestSplitNeotexFormat(t *testing.T) {
 
 func TestApplyNeotexCode(t *testing.T) {
 	tests := []struct {
-		name       string
-		code       string
-		checkFn    func(*types.SGR) bool
-		checkDesc  string
+		name      string
+		code      string
+		checkFn   func(*types.SGR) bool
+		checkDesc string
 	}{
 		// Foreground colors (lowercase = standard 0-7)
 		{
@@ -412,8 +412,8 @@ func TestParseLineSequences(t *testing.T) {
 		expected []styleChange
 	}{
 		{
-			name:    "Empty",
-			seqLine: "",
+			name:     "Empty",
+			seqLine:  "",
 			expected: []styleChange{},
 		},
 		{

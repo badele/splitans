@@ -1,13 +1,4 @@
-```text
-  ██▌   ▓▓  ▐█████   ▄▄██▄   ▀███████▀  ▐█████  ▐██▄   ▓▓
-  ▓██ ░ ██  ▐█▌     ▐██▀█ ▌▓ ░  ▐█▌  ░  ▐█▌      ▓█▌ ░ ██
- ▐░█ ▌▐ █▓  ░ ██    ██  ▐██  ░░ ░  ░░░  ░ ██   ░ ░█▌▐▓ █▓
- ▐█▌██ ▐░▌  ██   ░ ▐██ ░ ██▌ ▒▒ ██ ░░░  ██   ░ ▒▄▐█▄ ▄█▀
- ░█ ▐░▌▐▒▌ ▐░▌ ░░░ ░░▌▐░ ░█▌ ▒▒▐░▌ ░░  ▐░▌ ░░░ ░ ▄█▀██▄ ▀
- ▒░  ▒▒▐▓░ ▐▒▌ ▀   ▒▒▌▐ ▐▒█  ▒▓▐▒▌░░░  ▐▒▌ ▀    ▒░ ▄ ██▓░
-▐▓▌░ ▐▓▓█  █▓ ▄▄▓█ █▓  ▄▓█   ▒ █▓ ░░░  █▓ ▄▄▓█ ▐▓▌░░░▐▓█
-▐█▌   ██▓  ▓██▀▀   ██▄██▀▄░    ▓█      ▓██▀▀   ▐█▌ ▀ ▐█▓
-```
+![logo](./logo.png)
 
 Splitans is a tokenization tool that parses ANSI files and separates ANSI
 sequences from text. You can save the stdout output to a file with the `.neo`
@@ -84,4 +75,4 @@ just neotex-all-from-ansi "<PATH>"
   - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
   - https://ecma-international.org/wp-content/uploads/ECMA-48_5th_edition_june_1991.pdf
 - Logo Font
-  - https://n0namen0.github.io/CODEF_Ansi_Logo_Maker/ (VENGANCX)
+  - https://n0namen0.github.io/CODEF_Ansi_Logo_Maker/ (ZETRAX)

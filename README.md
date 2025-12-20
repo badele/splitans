@@ -9,6 +9,13 @@ the content without requiring an ANSI terminal.
 It is also possible to export to various formats, such as ANSI, table, stats or
 JSON.
 
+## Installation
+
+```bash
+export PATH="$HOME/go/bin:$PATH"
+go install github.com/badele/splitans
+```
+
 ## Usage
 
 By default, `splitans` converts UTF-8 ANSI to UTF-8 `neotex` format and outputs
@@ -16,31 +23,31 @@ to stdout.
 
 ```bash
 # Convert 16colors to UTF-8 ANSI (terminal)
-curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F ansi
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F ansi
 
 # Convert 16colors to UTF-8 ANSI with true VGA colors (disable terminal theme)
-curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F ansi -v
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F ansi -v
 
 # Convert 16colors legacy ANSI to neotex
-curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 > /tmp/WWANS157.neo
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 > /tmp/WWANS157.neo
 less -S /tmp/WWANS157.neo
 
 # Convert neotex to ANSI
-./splitans /tmp/WWANS157.neo -f neotex -F ansi
-./splitans /tmp/WWANS157.neo -f neotex -E cp437 -F ansi
+splitans /tmp/WWANS157.neo -f neotex -F ansi
+splitans /tmp/WWANS157.neo -f neotex -E cp437 -F ansi
 
 # Convert 16colors to UTF-8 plaintext
-./splitans /tmp/WWANS157.neo -f neotex -F plaintext
+splitans /tmp/WWANS157.neo -f neotex -F plaintext
 cat /tmp/WWANS157.neo | colrm 80
 
 # Copy ANSI to termbin.com
-cat /tmp/WWANS157.neo | ./splitans -f neotex -F ansi | nc termbin.com 9999
+cat /tmp/WWANS157.neo | splitans -f neotex -F ansi | nc termbin.com 9999
 curl -s https://termbin.com/w7sp
 
 # Display ANSI tokens in other formats
-curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F json
-curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F table
-curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | ./splitans -e cp437 -F stats
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F json
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F table
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F stats
 ```
 
 ## Output Examples

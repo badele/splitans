@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"splitans/types"
+	"github.com/badele/splitans/types"
 )
 
 type Tokenizer struct {

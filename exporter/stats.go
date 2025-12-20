@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"splitans/importer/ansi"
-	"splitans/types"
+	"github.com/badele/splitans/importer/ansi"
+	"github.com/badele/splitans/types"
 )
 
 func DisplayStats(tok types.TokenizerWithStats) {

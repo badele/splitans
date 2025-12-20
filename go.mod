@@ -1,4 +1,4 @@
-module splitans
+module github.com/badele/splitans
 
 go 1.24.3
 

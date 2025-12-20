@@ -3,8 +3,8 @@ package exporter
 import (
 	"fmt"
 
-	"splitans/processor"
-	"splitans/types"
+	"github.com/badele/splitans/processor"
+	"github.com/badele/splitans/types"
 )
 
 // ExportFlattenedText exports tokens to flattened plain text without styles

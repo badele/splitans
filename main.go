@@ -12,10 +12,10 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
 
-	"splitans/exporter"
-	"splitans/importer/ansi"
-	"splitans/importer/neotex"
-	"splitans/types"
+	"github.com/badele/splitans/exporter"
+	"github.com/badele/splitans/importer/ansi"
+	"github.com/badele/splitans/importer/neotex"
+	"github.com/badele/splitans/types"
 )
 
 type CLI struct {

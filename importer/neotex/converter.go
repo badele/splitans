@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"splitans/types"
+	"github.com/badele/splitans/types"
 )
 
 // NeotexMetadata contains metadata extracted from neotex format

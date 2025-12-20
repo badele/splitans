@@ -3,8 +3,8 @@ package exporter
 import (
 	"fmt"
 
-	"splitans/processor"
-	"splitans/types"
+	"github.com/badele/splitans/processor"
+	"github.com/badele/splitans/types"
 )
 
 func ExportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool) (string, error) {

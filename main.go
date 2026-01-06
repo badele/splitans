@@ -1,21 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/alecthomas/kong"
-	"golang.org/x/text/encoding"
-	"golang.org/x/text/encoding/charmap"
-	"golang.org/x/text/transform"
 
-	"github.com/badele/splitans/exporter"
-	"github.com/badele/splitans/importer/ansi"
-	"github.com/badele/splitans/importer/neotex"
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/exporter"
+	"github.com/badele/splitans/pkg/splitans"
+	"github.com/badele/splitans/internal/types"
 )
 
 type CLI struct {
@@ -40,61 +35,6 @@ type CLI struct {
 	} `embed:"" prefix:"" group:"Debug options:"`
 }
 
-func convertToUTF8(data []byte, sourceEncoding string) ([]byte, error) {
-	if sourceEncoding == "utf8" {
-		return data, nil
-	}
-
-	var decoder *encoding.Decoder
-
-	switch sourceEncoding {
-	case "cp437":
-		decoder = charmap.CodePage437.NewDecoder()
-	case "cp850":
-		decoder = charmap.CodePage850.NewDecoder()
-	case "iso-8859-1":
-		decoder = charmap.ISO8859_1.NewDecoder()
-	default:
-		return nil, fmt.Errorf("unsupported encoding: %s", sourceEncoding)
-	}
-
-	// Convert to UTF-8
-	reader := transform.NewReader(bytes.NewReader(data), decoder)
-	utf8Data, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("encoding conversion error: %w", err)
-	}
-
-	return utf8Data, nil
-}
-
-func convertToEncoding(data []byte, targetEncoding string) ([]byte, error) {
-	if targetEncoding == "utf8" {
-		return data, nil
-	}
-
-	var encoder *encoding.Encoder
-
-	switch targetEncoding {
-	case "cp437":
-		encoder = charmap.CodePage437.NewEncoder()
-	case "cp850":
-		encoder = charmap.CodePage850.NewEncoder()
-	case "iso-8859-1":
-		encoder = charmap.ISO8859_1.NewEncoder()
-	default:
-		return nil, fmt.Errorf("unsupported encoding: %s", targetEncoding)
-	}
-
-	// Convert from UTF-8 to target encoding
-	reader := transform.NewReader(bytes.NewReader(data), encoder)
-	encodedData, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("encoding conversion error: %w", err)
-	}
-
-	return encodedData, nil
-}
 
 func ConcatenateTextAndSequence(left, right string, leftWidth int, separator string) string {
 	leftLines := strings.Split(left, "\n")
@@ -181,7 +121,7 @@ func main() {
 		encoding = "utf8"
 	}
 
-	data, err = convertToUTF8(data, encoding)
+	data, err = splitans.ConvertToUTF8(data, encoding)
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Encoding conversion error: %v\n", err)
@@ -196,7 +136,7 @@ func main() {
 	/////////////////////////////////////////////////////////////////////////////
 	switch cli.Input.Iformat {
 	case "ansi":
-		tok = ansi.NewANSITokenizer(data)
+		tok = splitans.NewANSITokenizer(data)
 		tokens = tok.Tokenize()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ANSI parse error: %v\n", err)
@@ -204,10 +144,8 @@ func main() {
 		}
 
 	case "neotex":
-
-		tok = neotex.NewNeotexTokenizer(data, cli.Output.Width)
+		tok = splitans.NewNeotexTokenizer(data, cli.Output.Width)
 		tokens = tok.Tokenize()
-
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Neotex parse error: %v\n", err)
 			os.Exit(1)
@@ -264,7 +202,7 @@ func main() {
 		}
 
 		// Convert to output encoding if needed
-		outputBytes, err := convertToEncoding([]byte(ansiOutput), cli.Output.Oencoding)
+		outputBytes, err := splitans.ConvertToEncoding([]byte(ansiOutput), cli.Output.Oencoding)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
 			os.Exit(1)
@@ -320,7 +258,7 @@ func main() {
 		}
 
 		// Convert to output encoding if needed
-		outputBytes, err := convertToEncoding([]byte(plainText), cli.Output.Oencoding)
+		outputBytes, err := splitans.ConvertToEncoding([]byte(plainText), cli.Output.Oencoding)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
 			os.Exit(1)

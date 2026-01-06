@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/types"
 )
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -207,7 +207,6 @@ func (vt *VirtualTerminal) handleSGR(params []string) {
 }
 
 func (vt *VirtualTerminal) handleCSI(token types.Token) {
-
 	if vt.debugCursor {
 		fmt.Printf("\nBefore handleCSI Cursor at (%d, %d)\n", vt.cursorX, vt.cursorY)
 	}
@@ -302,6 +301,51 @@ func (vt *VirtualTerminal) handleCSI(token types.Token) {
 			mode, _ = strconv.Atoi(token.Parameters[0])
 		}
 		vt.eraseLine(mode)
+
+	case 'b': // Repeat previous character (REP)
+		n := 1
+		if len(token.Parameters) > 0 {
+			n, _ = strconv.Atoi(token.Parameters[0])
+		}
+		if n < 1 {
+			n = 1
+		}
+
+		srcX := vt.cursorX - 1
+		srcY := vt.cursorY
+		if srcX < 0 {
+			if vt.cursorY == 0 {
+				break
+			}
+			srcY = vt.cursorY - 1
+			srcX = vt.width - 1
+		}
+
+		source := vt.buffer[srcY][srcX]
+		if source.Char == 0x0 {
+			break
+		}
+
+		for i := 0; i < n; i++ {
+			if vt.cursorY >= vt.height {
+				break
+			}
+
+			vt.buffer[vt.cursorY][vt.cursorX] = Cell{
+				Char: source.Char,
+				SGR:  source.SGR.Copy(),
+			}
+			vt.cursorX++
+			vt.maxCursorX = max(vt.maxCursorX, vt.cursorX)
+			vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
+
+			if vt.cursorX >= vt.width {
+				vt.cursorX = 0
+				vt.cursorY++
+				vt.maxCursorX = vt.width - 1
+				vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
+			}
+		}
 
 	case 's': // Save Cursor Position
 		vt.savedCursorX = vt.cursorX

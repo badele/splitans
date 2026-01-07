@@ -320,6 +320,7 @@ func (s *SGR) String() string {
 	parts = append(parts, fmt.Sprintf("fg:%s", s.FgColor.String()))
 	parts = append(parts, fmt.Sprintf("bg:%s", s.BgColor.String()))
 
+	parts = append(parts, fmt.Sprintf("default:%t", s.FgColor.IsDefault()))
 	parts = append(parts, fmt.Sprintf("bold:%t", s.Bold))
 	parts = append(parts, fmt.Sprintf("dim:%t", s.Dim))
 	parts = append(parts, fmt.Sprintf("italic:%t", s.Italic))
@@ -846,8 +847,12 @@ func (s *SGR) diffToVGAColors(previous *SGR, legacyMode bool) string {
 		}
 	}
 
-	// FG color
-	if previous == nil || s.FgColor != previous.FgColor {
+	// FG color - also recalculate when Bold changes for standard colors (VGA: bold affects brightness)
+	fgChanged := previous == nil || s.FgColor != previous.FgColor
+	boldChangedWithStdColor := previous != nil && s.Bold != previous.Bold &&
+		!s.FgColor.IsDefault() && s.FgColor.Type == ColorStandard && s.FgColor.Index < 8
+
+	if fgChanged || boldChangedWithStdColor {
 		if !s.FgColor.IsDefault() && s.FgColor.Type == ColorStandard {
 			colorIndex := s.FgColor.Index
 			if s.Bold && colorIndex < 8 {
@@ -862,8 +867,7 @@ func (s *SGR) diffToVGAColors(previous *SGR, legacyMode bool) string {
 				codes = append(codes, fmt.Sprintf("%d", c))
 			}
 		}
-	}
-
+	} 
 	// BG color
 	if previous == nil || s.BgColor != previous.BgColor {
 		if !s.BgColor.IsDefault() && s.BgColor.Type == ColorStandard {

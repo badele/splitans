@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/types"
 )
 
 type TokenizerJSONOutput struct {

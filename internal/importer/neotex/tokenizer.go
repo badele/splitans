@@ -46,8 +46,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/badele/splitans/importer/ansi"
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/importer/ansi"
+	"github.com/badele/splitans/internal/types"
 )
 
 type Tokenizer struct {

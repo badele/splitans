@@ -13,7 +13,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/types"
 )
 
 type Tokenizer struct {
@@ -247,6 +247,15 @@ func (t *Tokenizer) parseCSI(startBytePos int, startRunePos int) {
 		{
 			token.CSINotation = "CSI Ps J"
 			token.Signification = strings.Join(ParseEDParams(params), ", ")
+		}
+	case 'b':
+		{
+			token.CSINotation = "CSI Ps b"
+			number := 1
+			if len(params) > 0 {
+				number = ParseNumberParam(params[0], 1)
+			}
+			token.Signification = fmt.Sprintf("Repeat previous character %d times", number)
 		}
 	case 's':
 		{

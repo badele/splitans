@@ -1,5 +1,5 @@
 # Configuration variables
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.24.3
 ARG ALPINE_VERSION=3.22
 
 # Build stage
@@ -12,11 +12,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy source code
-COPY *.go ./
-COPY importer ./importer
-COPY exporter ./exporter
-COPY processor ./processor
-COPY types ./types
+COPY main.go ./
+COPY internal ./internal
+COPY pkg ./pkg
 
 # Compile application
 RUN CGO_ENABLED=0 GOOS=linux go build -o splitans .

@@ -1,0 +1,8 @@
+.git
+.direnv
+coverage.*
+*.ans
+*.neo
+*.png
+result
+result-*

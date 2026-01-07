@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/types"
 )
 
 func TestSplitNeotexFormat(t *testing.T) {

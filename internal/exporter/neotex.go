@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/badele/splitans/processor"
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/processor"
+	"github.com/badele/splitans/internal/types"
 )
 
 // NeotexVersion is the current version of the neotex format

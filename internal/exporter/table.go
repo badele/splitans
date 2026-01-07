@@ -5,8 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/badele/splitans/importer/ansi"
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/importer/ansi"
+	"github.com/badele/splitans/internal/types"
 )
 
 func ExportTokensToTable(tokens []types.Token, writer io.Writer) error {

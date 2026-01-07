@@ -3,7 +3,7 @@ package exporter
 import (
 	"strings"
 
-	"github.com/badele/splitans/types"
+	"github.com/badele/splitans/internal/types"
 )
 
 // ExportPassthroughANSI reconstructs ANSI output directly from tokens

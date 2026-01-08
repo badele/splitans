@@ -151,10 +151,10 @@ func ApplyNeotexCode(code string, sgr *types.SGR) {
 	}
 }
 
-func NewNeotexTokenizer(data []byte, width int) *Tokenizer {
-	textLines, seqLines := SplitNeotexFormat(width, data)
+func NewNeotexTokenizer(data []byte, width int) (parsedWidth int, tokenizer *Tokenizer) {
+	parsedWidth, textLines, seqLines := SplitNeotexFormat(width, data)
 
-	return &Tokenizer{
+	return parsedWidth, &Tokenizer{
 		textLines: textLines,
 		seqLines:  seqLines,
 		Tokens:    make([]types.Token, 0),
@@ -189,12 +189,34 @@ func parseRGBHex(hexStr string) (r, g, b uint8, err error) {
 
 // SplitNeotexFormat sépare les données neotex en texte et séquences
 // Format: "texte (80 car) | séquence"
-// Note: width est en nombre de runes (caractères), pas en bytes
 // Retourne des tableaux de lignes pour éviter les \n embeddés
-func SplitNeotexFormat(width int, data []byte) (textLines []string, seqLines []string) {
+func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []string, seqLines []string) {
 	separator := " | "
 
 	lines := strings.Split(string(data), "\n")
+	if width <= 0 {
+		width = 80
+	}
+	if len(lines) > 0 {
+		if twIndex := strings.Index(lines[0], "!TW"); twIndex >= 0 {
+			rest := lines[0][twIndex+3:]
+			if slashIndex := strings.Index(rest, "/"); slashIndex >= 0 {
+				value := rest[slashIndex+1:]
+				digitEnd := 0
+				for digitEnd < len(value) && value[digitEnd] >= '0' && value[digitEnd] <= '9' {
+					digitEnd++
+				}
+				if digitEnd > 0 {
+					if v, err := strconv.Atoi(value[:digitEnd]); err == nil {
+						width = v
+					}
+				}
+			}
+		}
+	}
+
+	fmt.Printf("Using neotex width: %d\n", width)
+	parsedWidth = width
 
 	for n, line := range lines {
 		// Convert to runes to handle UTF-8 properly
@@ -221,7 +243,7 @@ func SplitNeotexFormat(width int, data []byte) (textLines []string, seqLines []s
 		seqLines = append(seqLines, seq)
 	}
 
-	return textLines, seqLines
+	return parsedWidth, textLines, seqLines
 }
 
 func (t *Tokenizer) Tokenize() []types.Token {

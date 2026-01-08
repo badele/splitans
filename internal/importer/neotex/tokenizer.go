@@ -215,7 +215,6 @@ func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []str
 		}
 	}
 
-	fmt.Printf("Using neotex width: %d\n", width)
 	parsedWidth = width
 
 	for n, line := range lines {

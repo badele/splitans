@@ -32,6 +32,9 @@ type VirtualTerminal struct {
 	useVGAColors   bool
 	debugCursor    bool
 	debugSGR       bool
+	lastWrapped    bool
+	// Ignore CR/LF tokens that immediately follow a soft wrap at width.
+	ignoreWrapCRLF bool
 }
 
 func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors bool) *VirtualTerminal {
@@ -57,6 +60,8 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 		useVGAColors:   useVGAColors,
 		debugCursor:    false,
 		debugSGR:       false,
+		lastWrapped:    false,
+		ignoreWrapCRLF: true,
 	}
 }
 func (vt *VirtualTerminal) GetWidth() int {
@@ -101,6 +106,10 @@ func (vt *VirtualTerminal) applyToken(token types.Token) error {
 
 func (vt *VirtualTerminal) writeText(text string) {
 	for _, r := range text {
+		if vt.lastWrapped {
+			vt.lastWrapped = false
+		}
+
 		if vt.debugCursor {
 			fmt.Printf("\nBefore writeText Cursor at (%d, %d)\n", vt.cursorX, vt.cursorY)
 		}
@@ -120,6 +129,7 @@ func (vt *VirtualTerminal) writeText(text string) {
 				vt.cursorY++
 				vt.maxCursorX = vt.width - 1
 				vt.maxCursorY = max(vt.maxCursorY, vt.cursorY)
+				vt.lastWrapped = true
 			}
 
 			if vt.debugCursor {
@@ -132,6 +142,16 @@ func (vt *VirtualTerminal) writeText(text string) {
 func (vt *VirtualTerminal) handleC0(code byte) {
 	if vt.debugCursor {
 		fmt.Printf("\nBefore handleC0 Cursor at (%d, %d)\n", vt.cursorX, vt.cursorY)
+	}
+
+	if vt.ignoreWrapCRLF && vt.lastWrapped {
+		if code == 0x0D {
+			return
+		}
+		if code == 0x0A {
+			vt.lastWrapped = false
+			return
+		}
 	}
 
 	switch code {
@@ -167,6 +187,7 @@ func (vt *VirtualTerminal) handleC0(code byte) {
 			vt.cursorX--
 		}
 	}
+	vt.lastWrapped = false
 
 	if vt.debugCursor {
 		fmt.Printf("\nAfter handleC0 Cursor at (%d, %d)\n", vt.cursorX, vt.cursorY)

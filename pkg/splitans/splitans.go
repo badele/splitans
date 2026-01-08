@@ -71,17 +71,17 @@ type (
 
 // Token type constants
 const (
-	TokenText         = types.TokenText
-	TokenC0           = types.TokenC0
-	TokenC1           = types.TokenC1
-	TokenCSI          = types.TokenCSI
+	TokenText          = types.TokenText
+	TokenC0            = types.TokenC0
+	TokenC1            = types.TokenC1
+	TokenCSI           = types.TokenCSI
 	TokenCSIInterupted = types.TokenCSIInterupted
-	TokenSGR          = types.TokenSGR
-	TokenDCS          = types.TokenDCS
-	TokenOSC          = types.TokenOSC
-	TokenEscape       = types.TokenEscape
-	TokenSauce        = types.TokenSauce
-	TokenUnknown      = types.TokenUnknown
+	TokenSGR           = types.TokenSGR
+	TokenDCS           = types.TokenDCS
+	TokenOSC           = types.TokenOSC
+	TokenEscape        = types.TokenEscape
+	TokenSauce         = types.TokenSauce
+	TokenUnknown       = types.TokenUnknown
 )
 
 // Color type constants
@@ -177,7 +177,8 @@ func NewANSITokenizer(input []byte) *ANSITokenizer {
 
 // NewNeotexTokenizer creates a new tokenizer for Neotex format data.
 // The width parameter specifies the expected line width.
-func NewNeotexTokenizer(data []byte, width int) *NeotexTokenizer {
+// Returns the parsed width (overrides when !TWxx/yy is present) and the tokenizer.
+func NewNeotexTokenizer(data []byte, width int) (int, *NeotexTokenizer) {
 	return neotex.NewNeotexTokenizer(data, width)
 }
 

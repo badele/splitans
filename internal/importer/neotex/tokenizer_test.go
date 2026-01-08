@@ -40,7 +40,7 @@ func TestSplitNeotexFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			textLines, seqLines := SplitNeotexFormat(tt.width, tt.data)
+			_, textLines, seqLines := SplitNeotexFormat(tt.width, tt.data)
 			if !reflect.DeepEqual(textLines, tt.expectedText) {
 				t.Errorf("Text lines: expected %v, got %v", tt.expectedText, textLines)
 			}
@@ -355,7 +355,7 @@ func findSubstring(s, substr string) bool {
 func TestNewNeotexTokenizer(t *testing.T) {
 	// Test basic tokenizer creation
 	data := []byte("Hello | 1:Fr")
-	tokenizer := NewNeotexTokenizer(data, 5)
+	_, tokenizer := NewNeotexTokenizer(data, 5)
 
 	if tokenizer == nil {
 		t.Fatal("NewNeotexTokenizer returned nil")
@@ -370,7 +370,7 @@ func TestNewNeotexTokenizer(t *testing.T) {
 func TestTokenizerWithMultipleStyles(t *testing.T) {
 	// Test with multiple style changes
 	data := []byte("RedGreen | 1:Fr; 4:Fg")
-	tokenizer := NewNeotexTokenizer(data, 8)
+	_, tokenizer := NewNeotexTokenizer(data, 8)
 
 	tokens := tokenizer.Tokenize()
 
@@ -396,7 +396,7 @@ func TestTokenizerWithMultipleStyles(t *testing.T) {
 
 func TestTokenizerGetStats(t *testing.T) {
 	data := []byte("Hello | 1:Fr")
-	tokenizer := NewNeotexTokenizer(data, 5)
+	_, tokenizer := NewNeotexTokenizer(data, 5)
 	tokenizer.Tokenize()
 
 	stats := tokenizer.GetStats()

@@ -9,8 +9,8 @@ import (
 	"github.com/alecthomas/kong"
 
 	"github.com/badele/splitans/internal/exporter"
-	"github.com/badele/splitans/pkg/splitans"
 	"github.com/badele/splitans/internal/types"
+	"github.com/badele/splitans/pkg/splitans"
 )
 
 type CLI struct {
@@ -34,7 +34,6 @@ type CLI struct {
 		Debug bool `short:"d" help:"Enable debug mode (displays cursor positions)"`
 	} `embed:"" prefix:"" group:"Debug options:"`
 }
-
 
 func ConcatenateTextAndSequence(left, right string, leftWidth int, separator string) string {
 	leftLines := strings.Split(left, "\n")
@@ -74,6 +73,7 @@ func main() {
 	var err error
 	var filename string
 	var encoding string
+	decodedWidth := 0
 
 	/////////////////////////////////////////////////////////////////////////////
 	// Parse argument file or stdin
@@ -144,7 +144,7 @@ func main() {
 		}
 
 	case "neotex":
-		tok = splitans.NewNeotexTokenizer(data, cli.Output.Width)
+		decodedWidth, tok = splitans.NewNeotexTokenizer(data, cli.Output.Width)
 		tokens = tok.Tokenize()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Neotex parse error: %v\n", err)
@@ -162,6 +162,10 @@ func main() {
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown format: %s\n", cli.Input.Iformat)
 		os.Exit(1)
+	}
+
+	if decodedWidth > 0 {
+		cli.Output.Width = decodedWidth
 	}
 
 	// Validate --write option usage

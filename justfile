@@ -32,7 +32,7 @@ go-init:
 # Test project
 [group('golang')]
 @go-test:
-  go test
+  go test ./...
 
 # Compute code coverage
 [group('golang')]

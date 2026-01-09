@@ -78,6 +78,7 @@ neotex-all-from-ansi PATH:
       echo -e "\n\nConverting $file to neotex format"
       just neotex-from-ansi "$file" 2>&1 || exit 1
     done;
+    find 16colors/1990/1990 -name "*.error" | wc -l
 
 # Convert all ansi file to a single png
 [group('neotex')]

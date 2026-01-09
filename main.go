@@ -27,6 +27,7 @@ type CLI struct {
 		Save      string `short:"S" type:"path" help:"Save to file (for -oformat option (neotex)"`
 		Width     int    `short:"W" default:80 help:"Width text to specified width"`
 		Lines     int    `short:"L" default:1000 help:"Nb lines text"`
+		Inline    bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
 		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
 	} `embed:"" prefix:"" group:"Output options:"`
 
@@ -198,7 +199,11 @@ func main() {
 		// } else {
 		// 	ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, tokens, cli.Output.Oencoding, cli.Output.VGA)
 		// }
-		ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA)
+		if cli.Output.Inline {
+			ansiOutput, err = exporter.ExportFlattenedANSIInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA)
+		} else {
+			ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA)
+		}
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error exporting to ANSI: %v\n", err)
@@ -227,7 +232,12 @@ func main() {
 	// 	}
 	case "neotex":
 		// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
-		plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
+		var plainText, sequenceText string
+		if cli.Output.Inline {
+			plainText, sequenceText, err = exporter.ExportFlattenedNeotexInline(cli.Output.Width, cli.Output.Lines, tokens)
+		} else {
+			plainText, sequenceText, err = exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neotex format: %v\n", err)
 			os.Exit(1)
@@ -255,7 +265,12 @@ func main() {
 			os.Exit(1)
 		}
 	case "plaintext":
-		plainText, err := exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding)
+		var plainText string
+		if cli.Output.Inline {
+			plainText, err = exporter.ExportFlattenedTextInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding)
+		} else {
+			plainText, err = exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding)
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying plain text: %v\n", err)
 			os.Exit(1)

@@ -867,7 +867,7 @@ func (s *SGR) diffToVGAColors(previous *SGR, legacyMode bool) string {
 				codes = append(codes, fmt.Sprintf("%d", c))
 			}
 		}
-	} 
+	}
 	// BG color
 	if previous == nil || s.BgColor != previous.BgColor {
 		if !s.BgColor.IsDefault() && s.BgColor.Type == ColorStandard {

@@ -436,6 +436,15 @@ func (vt *VirtualTerminal) eraseLine(mode int) {
 // The legacyMode ensures ANSI 1990 compatibility by using reset+rebuild
 // when attributes need to be turned OFF, rather than using codes like [22m, [23m, etc.
 func (vt *VirtualTerminal) ExportFlattenedANSI() string {
+	return vt.exportFlattenedANSI(false)
+}
+
+// ExportFlattenedANSIInline exports the buffer as a single line with minimal ANSI codes.
+func (vt *VirtualTerminal) ExportFlattenedANSIInline() string {
+	return vt.exportFlattenedANSI(true)
+}
+
+func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
 	lines := vt.ExportSplitTextAndSequences()
 	var builder strings.Builder
 
@@ -473,7 +482,7 @@ func (vt *VirtualTerminal) ExportFlattenedANSI() string {
 
 		builder.WriteString(lineText)
 
-		if vt.outputEncoding == "utf8" {
+		if vt.outputEncoding == "utf8" && !inline {
 			builder.WriteString("\n")
 		}
 	}
@@ -489,12 +498,24 @@ func (vt *VirtualTerminal) ExportFlattenedANSI() string {
 // ExportPlainText exports the buffer as plain text without ANSI codes
 // Uses ExportSplitTextAndSequences and extracts only the text part
 func (vt *VirtualTerminal) ExportPlainText() string {
+	return vt.exportPlainText(false)
+}
+
+// ExportPlainTextInline exports the buffer as plain text without newlines.
+func (vt *VirtualTerminal) ExportPlainTextInline() string {
+	return vt.exportPlainText(true)
+}
+
+func (vt *VirtualTerminal) exportPlainText(inline bool) string {
 	lines := vt.ExportSplitTextAndSequences()
 
 	var builder strings.Builder
 	for _, line := range lines {
 		builder.WriteString(line.Text)
-		builder.WriteString("\n")
+
+		if !inline {
+			builder.WriteString("\n")
+		}
 	}
 
 	return builder.String()

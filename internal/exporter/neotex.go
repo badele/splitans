@@ -236,15 +236,63 @@ func DiffSGRToNeotex(current, previous *types.SGR) []string {
 	return codes
 }
 
+func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWithSequences {
+	if len(lines) <= 1 {
+		return lines
+	}
+
+	totalSeqs := 0
+	for _, line := range lines {
+		totalSeqs += len(line.Sequences)
+	}
+
+	var textBuilder strings.Builder
+	flattenedSeqs := make([]types.SGRSequence, 0, totalSeqs)
+
+	offset := 0
+	for _, line := range lines {
+		textBuilder.WriteString(line.Text)
+
+		for _, seq := range line.Sequences {
+			flattenedSeqs = append(flattenedSeqs, types.SGRSequence{
+				Position: seq.Position + offset,
+				SGR:      seq.SGR.Copy(),
+			})
+		}
+
+		offset += len([]rune(line.Text))
+	}
+
+	return []types.LineWithSequences{{
+		Text:      textBuilder.String(),
+		Sequences: flattenedSeqs,
+	}}
+}
+
 // ExportToNeotex exports processor.VirtualTerminal buffer to neotex format with differential encoding.
 // Returns (text, sequences) where:
 // - text is the plain text content
 // - sequences is the neotex format sequences with positions (per line)
 // Uses differential encoding to minimize the number of codes by only outputting changes.
 func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
+	return exportToNeotex(vt, false)
+}
+
+// ExportToInlineNeotex exports the buffer to neotex format, flattening all lines into one.
+func ExportToInlineNeotex(vt *processor.VirtualTerminal) (string, string) {
+	return exportToNeotex(vt, true)
+}
+
+func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string) {
 	lines := vt.ExportSplitTextAndSequences()
 
-	// _,maxCursorY := vt.GetMaxCursorPosition()
+	if inline {
+		lines = flattenLinesWithSequences(lines)
+	}
+
+	if len(lines) == 0 {
+		return "", ""
+	}
 
 	var textBuilder strings.Builder
 	var seqBuilder strings.Builder
@@ -252,7 +300,16 @@ func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
 	// Track previous SGR state across all lines for differential encoding
 	var previousSGR *types.SGR = nil
 
-	// firstLine := true
+	textWidth := vt.GetWidth()
+	maxWidth := vt.GetMaxCursorX() + 1
+	lineCount := len(lines)
+
+	if inline {
+		textWidth = len([]rune(lines[0].Text))
+		maxWidth = textWidth
+		lineCount = 1
+	}
+
 	for lineIdx, line := range lines {
 		// Add text
 		textBuilder.WriteString(line.Text)
@@ -266,8 +323,8 @@ func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
 		// Add version metadata on the first line
 		if lineIdx == 0 {
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!V%d", NeotexVersion))
-			lineSeqs = append(lineSeqs, fmt.Sprintf("!TW%d/%d", vt.GetMaxCursorX()+1, vt.GetWidth()))
-			lineSeqs = append(lineSeqs, fmt.Sprintf("!NL%d", vt.GetMaxCursorY()+1))
+			lineSeqs = append(lineSeqs, fmt.Sprintf("!TW%d/%d", maxWidth, textWidth))
+			lineSeqs = append(lineSeqs, fmt.Sprintf("!NL%d", lineCount))
 		}
 
 		for _, sgrChange := range line.Sequences {
@@ -302,13 +359,27 @@ func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
 
 // ExportFlattenedNeotex exports tokens to neotex format (always UTF-8)
 func ExportFlattenedNeotex(width, nblines int, tokens []types.Token) (string, string, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, false)
+}
+
+// ExportFlattenedNeotexInline exports tokens to inline neotex format (always UTF-8)
+func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token) (string, string, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, true)
+}
+
+func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool) (string, string, error) {
 	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", "", fmt.Errorf("error applying tokens: %w", err)
 	}
 
-	text, sequences := ExportToNeotex(vt)
+	var text, sequences string
+	if inline {
+		text, sequences = ExportToInlineNeotex(vt)
+	} else {
+		text, sequences = ExportToNeotex(vt)
+	}
 
 	return text, sequences, nil
 }

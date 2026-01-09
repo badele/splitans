@@ -27,7 +27,7 @@ func TestExportToInlineNeotex(t *testing.T) {
 		t.Fatalf("unexpected inline text: got %q", text)
 	}
 
-	expectedSequences := "!V1; !TW8/8; !NL1; 1:Fr, Bk; 5:Fg; 7:R0"
+	expectedSequences := "!V1; !TW6/8; !NL1; 1:Fr, Bk; 5:Fg; 7:R0"
 	if sequences != expectedSequences {
 		t.Fatalf("unexpected inline sequences: got %q, want %q", sequences, expectedSequences)
 	}

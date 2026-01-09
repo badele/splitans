@@ -305,8 +305,16 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 	lineCount := len(lines)
 
 	if inline {
-		textWidth = len([]rune(lines[0].Text))
+		textRunes := []rune(lines[0].Text)
+		textWidth = len(textRunes)
+		// Calculate true width by finding last non-space character
 		maxWidth = textWidth
+		for i := len(textRunes) - 1; i >= 0; i-- {
+			if textRunes[i] != ' ' {
+				maxWidth = i + 1
+				break
+			}
+		}
 		lineCount = 1
 	}
 

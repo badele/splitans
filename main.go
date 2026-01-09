@@ -25,8 +25,8 @@ type CLI struct {
 		Oformat   string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats" help:"Output format: ansi, json, neotex, plaintext, table, stats"`
 		Oencoding string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
 		Save      string `short:"S" type:"path" help:"Save to file (for -oformat option (neotex)"`
-		Width     int    `short:"W" default:80 help:"Width text to specified width"`
-		Lines     int    `short:"L" default:1000 help:"Nb lines text"`
+		Width     int    `short:"W" default:"80" help:"Width text to specified width"`
+		Lines     int    `short:"L" default:"1000" help:"Nb lines text"`
 		Inline    bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
 		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
 	} `embed:"" prefix:"" group:"Output options:"`

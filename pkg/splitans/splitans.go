@@ -169,6 +169,24 @@ func ConvertToEncoding(data []byte, targetEncoding string) ([]byte, error) {
 	return encodedData, nil
 }
 
+// NormalizeANSIUTF8Input cleans UTF-8 ANSI data by stripping carriage returns when a width is provided.
+// When width is zero or negative, the data is returned untouched.
+func NormalizeANSIUTF8Input(data []byte, width int) []byte {
+	if width <= 0 {
+		return data
+	}
+
+	normalized := make([]byte, 0, len(data))
+	for _, b := range data {
+		if b == '\r' {
+			continue
+		}
+		normalized = append(normalized, b)
+	}
+
+	return normalized
+}
+
 // NewANSITokenizer creates a new tokenizer for ANSI format data.
 // The input should be UTF-8 encoded (use ConvertToUTF8 if needed).
 func NewANSITokenizer(input []byte) *ANSITokenizer {
@@ -201,10 +219,20 @@ func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding stri
 	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors)
 }
 
+// ExportFlattenedANSIInline exports tokens to a single-line ANSI string.
+func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool) (string, error) {
+	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors)
+}
+
 // ExportFlattenedText exports tokens to plain text without ANSI codes.
 // This processes tokens through a virtual terminal and outputs only the text content.
 func ExportFlattenedText(width, nblines int, tokens []Token, outputEncoding string) (string, error) {
 	return exporter.ExportFlattenedText(width, nblines, tokens, outputEncoding)
+}
+
+// ExportFlattenedTextInline exports tokens to plain text on a single line.
+func ExportFlattenedTextInline(width, nblines int, tokens []Token, outputEncoding string) (string, error) {
+	return exporter.ExportFlattenedTextInline(width, nblines, tokens, outputEncoding)
 }
 
 // ExportFlattenedNeotex exports tokens to Neotex format.
@@ -213,6 +241,12 @@ func ExportFlattenedText(width, nblines int, tokens []Token, outputEncoding stri
 //   - sequences is the neotex format sequences with positions
 func ExportFlattenedNeotex(width, nblines int, tokens []Token) (string, string, error) {
 	return exporter.ExportFlattenedNeotex(width, nblines, tokens)
+}
+
+// ExportFlattenedNeotexInline exports tokens to inline Neotex format.
+// This flattens all lines into a single line and adjusts sequence positions.
+func ExportFlattenedNeotexInline(width, nblines int, tokens []Token) (string, string, error) {
+	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens)
 }
 
 // SGRToNeotex converts an SGR struct to neotex format strings.

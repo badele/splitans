@@ -7,7 +7,7 @@ import (
 )
 
 // CropRegion defines a rectangular region for cropping.
-// Coordinates are 0-indexed.
+// Coordinates are 1-indexed in input, stored as 0-indexed internally.
 type CropRegion struct {
 	X      int // Start X (column)
 	Y      int // Start Y (row)
@@ -16,7 +16,7 @@ type CropRegion struct {
 }
 
 // ParseCropRegion parses a crop string in format "x,y:x1,y1" (start:end coordinates).
-// Both coordinates are 0-indexed.
+// Coordinates are 1-indexed (first column/row is 1, not 0).
 // Returns nil if the string is empty.
 func ParseCropRegion(s string) (*CropRegion, error) {
 	if s == "" {
@@ -55,9 +55,20 @@ func ParseCropRegion(s string) (*CropRegion, error) {
 		return nil, fmt.Errorf("invalid end Y coordinate: %w", err)
 	}
 
+	// Convert from 1-indexed (user input) to 0-indexed (internal)
+	x = x - 1
+	y = y - 1
+	x1 = x1 - 1
+	y1 = y1 - 1
+
+	// Validate coordinates (after conversion to 0-indexed)
+	if x < 0 || y < 0 {
+		return nil, fmt.Errorf("invalid crop region: coordinates must be >= 1")
+	}
+
 	// Calculate width and height from start:end
-	width := x1 - x
-	height := y1 - y
+	width := x1 - x + 1
+	height := y1 - y + 1
 
 	if width <= 0 {
 		return nil, fmt.Errorf("invalid crop region: end X (%d) must be greater than start X (%d)", x1, x)

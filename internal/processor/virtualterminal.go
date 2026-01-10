@@ -12,13 +12,8 @@ import (
 // Virtual Terminal
 ///////////////////////////////////////////////////////////////////////////////
 
-type Cell struct {
-	Char rune
-	SGR  *types.SGR
-}
-
 type VirtualTerminal struct {
-	buffer         [][]Cell
+	buffer         [][]types.Cell
 	width          int
 	height         int
 	cursorX        int
@@ -39,11 +34,11 @@ type VirtualTerminal struct {
 
 func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors bool) *VirtualTerminal {
 	defaultSGR := types.NewSGR()
-	buffer := make([][]Cell, height)
+	buffer := make([][]types.Cell, height)
 	for i := range buffer {
-		buffer[i] = make([]Cell, width)
+		buffer[i] = make([]types.Cell, width)
 		for j := range buffer[i] {
-			buffer[i][j] = Cell{Char: 0x0, SGR: types.NewSGR()}
+			buffer[i][j] = types.NewCell()
 		}
 	}
 
@@ -115,7 +110,7 @@ func (vt *VirtualTerminal) writeText(text string) {
 		}
 
 		if vt.cursorY < vt.height {
-			vt.buffer[vt.cursorY][vt.cursorX] = Cell{
+			vt.buffer[vt.cursorY][vt.cursorX] = types.Cell{
 				Char: r,
 				SGR:  vt.currentSGR.Copy(),
 			}
@@ -352,7 +347,7 @@ func (vt *VirtualTerminal) handleCSI(token types.Token) {
 				break
 			}
 
-			vt.buffer[vt.cursorY][vt.cursorX] = Cell{
+			vt.buffer[vt.cursorY][vt.cursorX] = types.Cell{
 				Char: source.Char,
 				SGR:  source.SGR.Copy(),
 			}
@@ -391,7 +386,7 @@ func (vt *VirtualTerminal) eraseDisplay(mode int) {
 				if y == vt.cursorY && x < vt.cursorX {
 					continue
 				}
-				vt.buffer[y][x] = Cell{Char: 0x0, SGR: types.NewSGR()}
+				vt.buffer[y][x] = types.NewCell()
 			}
 		}
 	case 1: // Clear from beginning of screen to cursor
@@ -400,13 +395,13 @@ func (vt *VirtualTerminal) eraseDisplay(mode int) {
 				if y == vt.cursorY && x > vt.cursorX {
 					break
 				}
-				vt.buffer[y][x] = Cell{Char: 0x0, SGR: types.NewSGR()}
+				vt.buffer[y][x] = types.NewCell()
 			}
 		}
 	case 2: // Clear entire screen
 		for y := 0; y < vt.height; y++ {
 			for x := 0; x < vt.width; x++ {
-				vt.buffer[y][x] = Cell{Char: 0x0, SGR: types.NewSGR()}
+				vt.buffer[y][x] = types.NewCell()
 			}
 		}
 		vt.cursorX = 0
@@ -418,15 +413,15 @@ func (vt *VirtualTerminal) eraseLine(mode int) {
 	switch mode {
 	case 0: // Clear from cursor to end of line
 		for x := vt.cursorX; x < vt.width; x++ {
-			vt.buffer[vt.cursorY][x] = Cell{Char: 0x0, SGR: types.NewSGR()}
+			vt.buffer[vt.cursorY][x] = types.NewCell()
 		}
 	case 1: // Clear from beginning of line to cursor
 		for x := 0; x <= vt.cursorX; x++ {
-			vt.buffer[vt.cursorY][x] = Cell{Char: 0x0, SGR: types.NewSGR()}
+			vt.buffer[vt.cursorY][x] = types.NewCell()
 		}
 	case 2: // Clear entire line
 		for x := 0; x < vt.width; x++ {
-			vt.buffer[vt.cursorY][x] = Cell{Char: 0x0, SGR: types.NewSGR()}
+			vt.buffer[vt.cursorY][x] = types.NewCell()
 		}
 	}
 }
@@ -576,4 +571,98 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 	}
 
 	return result[:maxCursorY+1]
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Buffer Access and Manipulation
+///////////////////////////////////////////////////////////////////////////////
+
+// GetBuffer returns a deep copy of the buffer with all cells and their styles.
+// Each cell contains the character and its complete SGR state.
+// Useful for extracting raw buffer data for manipulation or cropping.
+func (vt *VirtualTerminal) GetBuffer() [][]types.Cell {
+	result := make([][]types.Cell, vt.height)
+	for y := 0; y < vt.height; y++ {
+		result[y] = make([]types.Cell, vt.width)
+		for x := 0; x < vt.width; x++ {
+			result[y][x] = vt.buffer[y][x].Copy()
+		}
+	}
+	return result
+}
+
+// GetHeight returns the height of the virtual terminal buffer.
+func (vt *VirtualTerminal) GetHeight() int {
+	return vt.height
+}
+
+// computeMaxCursor recalculates maxCursorX and maxCursorY based on buffer content.
+func (vt *VirtualTerminal) computeMaxCursor() {
+	vt.maxCursorX = 0
+	vt.maxCursorY = 0
+
+	for y := 0; y < vt.height; y++ {
+		for x := 0; x < vt.width; x++ {
+			if vt.buffer[y][x].Char != 0x0 {
+				vt.maxCursorY = max(vt.maxCursorY, y)
+				vt.maxCursorX = max(vt.maxCursorX, x)
+			}
+		}
+	}
+}
+
+// NewVirtualTerminalFromCells creates a VirtualTerminal from a cell buffer.
+// Useful for reconstructing a VT after cropping or manipulation.
+func NewVirtualTerminalFromCells(cells [][]types.Cell, outputEncoding string, useVGAColors bool) *VirtualTerminal {
+	if len(cells) == 0 {
+		return NewVirtualTerminal(0, 0, outputEncoding, useVGAColors)
+	}
+
+	height := len(cells)
+	width := len(cells[0])
+
+	vt := NewVirtualTerminal(width, height, outputEncoding, useVGAColors)
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width && x < len(cells[y]); x++ {
+			vt.buffer[y][x] = cells[y][x].Copy()
+		}
+	}
+
+	// Recalculate maxCursorX/Y based on content
+	vt.computeMaxCursor()
+
+	return vt
+}
+
+// Crop extracts a rectangular region from the buffer and returns a new VirtualTerminal.
+// Coordinates are 0-indexed. Returns nil if region is invalid.
+// The cropped VT preserves all cell styles (colors, effects).
+func (vt *VirtualTerminal) Crop(x, y, width, height int) *VirtualTerminal {
+	// Validation
+	if x < 0 || y < 0 || width <= 0 || height <= 0 {
+		return nil
+	}
+	if x >= vt.width || y >= vt.height {
+		return nil
+	}
+
+	// Adjust if region exceeds bounds
+	if x+width > vt.width {
+		width = vt.width - x
+	}
+	if y+height > vt.height {
+		height = vt.height - y
+	}
+
+	// Create the new buffer
+	cells := make([][]types.Cell, height)
+	for dy := 0; dy < height; dy++ {
+		cells[dy] = make([]types.Cell, width)
+		for dx := 0; dx < width; dx++ {
+			cells[dy][dx] = vt.buffer[y+dy][x+dx].Copy()
+		}
+	}
+
+	return NewVirtualTerminalFromCells(cells, vt.outputEncoding, vt.useVGAColors)
 }

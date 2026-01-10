@@ -15,12 +15,12 @@ func TestExportFlattenedANSIInline(t *testing.T) {
 		{Type: types.TokenText, Value: "CD"},
 	}
 
-	standard, err := ExportFlattenedANSI(2, 2, tokens, "utf8", false)
+	standard, err := ExportFlattenedANSI(2, 2, tokens, "utf8", false, nil)
 	if err != nil {
 		t.Fatalf("unexpected standard export error: %v", err)
 	}
 
-	inline, err := ExportFlattenedANSIInline(2, 2, tokens, "utf8", false)
+	inline, err := ExportFlattenedANSIInline(2, 2, tokens, "utf8", false, nil)
 	if err != nil {
 		t.Fatalf("unexpected inline export error: %v", err)
 	}

@@ -67,6 +67,9 @@ type (
 
 	// NeotexTokenizer is the tokenizer for Neotex format files
 	NeotexTokenizer = neotex.Tokenizer
+
+	// CropRegion defines a rectangular region for cropping
+	CropRegion = types.CropRegion
 )
 
 // Token type constants
@@ -212,41 +215,51 @@ func NewSGR() *SGR {
 	return types.NewSGR()
 }
 
+// ParseCropRegion parses a crop string in format "x,y:x1,y1".
+// Returns nil if the string is empty.
+func ParseCropRegion(s string) (*CropRegion, error) {
+	return types.ParseCropRegion(s)
+}
+
 // ExportFlattenedANSI exports tokens to a flattened ANSI string.
 // This processes tokens through a virtual terminal to resolve cursor positioning
 // and produces clean ANSI output.
-func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool) (string, error) {
-	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors)
+// If crop is non-nil, the output will be cropped to the specified region.
+func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion) (string, error) {
+	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, crop)
 }
 
 // ExportFlattenedANSIInline exports tokens to a single-line ANSI string.
-func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool) (string, error) {
-	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors)
+func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion) (string, error) {
+	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, crop)
 }
 
 // ExportFlattenedText exports tokens to plain text without ANSI codes.
 // This processes tokens through a virtual terminal and outputs only the text content.
-func ExportFlattenedText(width, nblines int, tokens []Token, outputEncoding string) (string, error) {
-	return exporter.ExportFlattenedText(width, nblines, tokens, outputEncoding)
+// If crop is non-nil, the output will be cropped to the specified region.
+func ExportFlattenedText(width, nblines int, tokens []Token, outputEncoding string, crop *CropRegion) (string, error) {
+	return exporter.ExportFlattenedText(width, nblines, tokens, outputEncoding, crop)
 }
 
 // ExportFlattenedTextInline exports tokens to plain text on a single line.
-func ExportFlattenedTextInline(width, nblines int, tokens []Token, outputEncoding string) (string, error) {
-	return exporter.ExportFlattenedTextInline(width, nblines, tokens, outputEncoding)
+func ExportFlattenedTextInline(width, nblines int, tokens []Token, outputEncoding string, crop *CropRegion) (string, error) {
+	return exporter.ExportFlattenedTextInline(width, nblines, tokens, outputEncoding, crop)
 }
 
 // ExportFlattenedNeotex exports tokens to Neotex format.
 // Returns (text, sequences, error) where:
 //   - text is the plain text content
 //   - sequences is the neotex format sequences with positions
-func ExportFlattenedNeotex(width, nblines int, tokens []Token) (string, string, error) {
-	return exporter.ExportFlattenedNeotex(width, nblines, tokens)
+//
+// If crop is non-nil, the output will be cropped to the specified region.
+func ExportFlattenedNeotex(width, nblines int, tokens []Token, crop *CropRegion) (string, string, error) {
+	return exporter.ExportFlattenedNeotex(width, nblines, tokens, crop)
 }
 
 // ExportFlattenedNeotexInline exports tokens to inline Neotex format.
 // This flattens all lines into a single line and adjusts sequence positions.
-func ExportFlattenedNeotexInline(width, nblines int, tokens []Token) (string, string, error) {
-	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens)
+func ExportFlattenedNeotexInline(width, nblines int, tokens []Token, crop *CropRegion) (string, string, error) {
+	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens, crop)
 }
 
 // SGRToNeotex converts an SGR struct to neotex format strings.

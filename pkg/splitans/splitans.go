@@ -70,6 +70,15 @@ type (
 
 	// CropRegion defines a rectangular region for cropping
 	CropRegion = types.CropRegion
+
+	// LineWithSequences contains a line of text and all SGR changes within that line
+	LineWithSequences = types.LineWithSequences
+
+	// SGRSequence represents a style change at a specific position
+	SGRSequence = types.SGRSequence
+
+	// ContentBounds represents the bounding box of actual content in the buffer
+	ContentBounds = processor.ContentBounds
 )
 
 // Token type constants

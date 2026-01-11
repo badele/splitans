@@ -366,20 +366,28 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 }
 
 // ExportFlattenedNeotex exports tokens to neotex format (always UTF-8)
-func ExportFlattenedNeotex(width, nblines int, tokens []types.Token) (string, string, error) {
-	return exportFlattenedNeotex(width, nblines, tokens, false)
+func ExportFlattenedNeotex(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, false, crop)
 }
 
 // ExportFlattenedNeotexInline exports tokens to inline neotex format (always UTF-8)
-func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token) (string, string, error) {
-	return exportFlattenedNeotex(width, nblines, tokens, true)
+func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, true, crop)
 }
 
-func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool) (string, string, error) {
+func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion) (string, string, error) {
 	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", "", fmt.Errorf("error applying tokens: %w", err)
+	}
+
+	// Apply crop if specified
+	if crop != nil {
+		vt = vt.Crop(crop.X, crop.Y, crop.Width, crop.Height)
+		if vt == nil {
+			return "", "", fmt.Errorf("invalid crop region")
+		}
 	}
 
 	var text, sequences string

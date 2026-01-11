@@ -29,6 +29,11 @@ go-init:
 @go-build: go-init
   go build
 
+# install go project
+[group('golang')]
+@go-install: go-init
+  go install
+
 # Test project
 [group('golang')]
 @go-test:
@@ -49,7 +54,7 @@ go-init:
 
 # test precommit hooks
 [group('precommit')]
-precommit-test:
+precommit-check:
   pre-commit run --all-files
 
 # Convert to neotex

@@ -366,29 +366,33 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 }
 
 // ExportFlattenedNeotex exports tokens to neotex format (always UTF-8)
-func ExportFlattenedNeotex(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, error) {
+// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
+func ExportFlattenedNeotex(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
 	return exportFlattenedNeotex(width, nblines, tokens, false, crop)
 }
 
 // ExportFlattenedNeotexInline exports tokens to inline neotex format (always UTF-8)
-func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, error) {
+// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
+func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
 	return exportFlattenedNeotex(width, nblines, tokens, true, crop)
 }
 
-func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion) (string, string, error) {
+func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion) (string, string, int, error) {
 	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
-		return "", "", fmt.Errorf("error applying tokens: %w", err)
+		return "", "", 0, fmt.Errorf("error applying tokens: %w", err)
 	}
 
 	// Apply crop if specified
 	if crop != nil {
 		vt = vt.Crop(crop.X, crop.Y, crop.Width, crop.Height)
 		if vt == nil {
-			return "", "", fmt.Errorf("invalid crop region")
+			return "", "", 0, fmt.Errorf("invalid crop region")
 		}
 	}
+
+	effectiveWidth := vt.GetWidth()
 
 	var text, sequences string
 	if inline {
@@ -397,7 +401,7 @@ func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool
 		text, sequences = ExportToNeotex(vt)
 	}
 
-	return text, sequences, nil
+	return text, sequences, effectiveWidth, nil
 }
 
 func getTokenTypeName(tokenType types.TokenType) string {

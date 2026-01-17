@@ -37,9 +37,9 @@ type CLI struct {
 	} `embed:"" prefix:"" group:"Debug options:"`
 }
 
-func ConcatenateTextAndSequence(left, right string, leftWidth int, separator string) string {
-	leftLines := strings.Split(left, "\n")
-	rightLines := strings.Split(right, "\n")
+func ConcatenateTextAndSequence(leftText, rightText string, leftWidth int, separator string) string {
+	leftLines := strings.Split(leftText, "\n")
+	rightLines := strings.Split(rightText, "\n")
 
 	result := []string{}
 	numLines := len(leftLines)
@@ -208,9 +208,9 @@ func main() {
 		// 	ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, tokens, cli.Output.Oencoding, cli.Output.VGA)
 		// }
 		if cli.Output.Inline {
-			ansiOutput, err = exporter.ExportFlattenedANSIInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion)
+			ansiOutput, _, err = exporter.ExportFlattenedANSIInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion)
 		} else {
-			ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion)
+			ansiOutput, _, err = exporter.ExportFlattenedANSI(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion)
 		}
 
 		if err != nil {
@@ -241,10 +241,11 @@ func main() {
 	case "neotex":
 		// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
 		var plainText, sequenceText string
+		var effectiveWidth int
 		if cli.Output.Inline {
-			plainText, sequenceText, err = exporter.ExportFlattenedNeotexInline(cli.Output.Width, cli.Output.Lines, tokens, cropRegion)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInline(cli.Output.Width, cli.Output.Lines, tokens, cropRegion)
 		} else {
-			plainText, sequenceText, err = exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens, cropRegion)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens, cropRegion)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neotex format: %v\n", err)
@@ -253,7 +254,7 @@ func main() {
 
 		// metadatas := neotex.ExtractMetadata(strings.Split(sequenceText, "\n"))
 
-		combined := ConcatenateTextAndSequence(plainText, sequenceText, cli.Output.Width, " | ")
+		combined := ConcatenateTextAndSequence(plainText, sequenceText, effectiveWidth, " | ")
 		fmt.Println(combined)
 
 	case "json":
@@ -275,9 +276,9 @@ func main() {
 	case "plaintext":
 		var plainText string
 		if cli.Output.Inline {
-			plainText, err = exporter.ExportFlattenedTextInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion)
+			plainText, _, err = exporter.ExportFlattenedTextInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion)
 		} else {
-			plainText, err = exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion)
+			plainText, _, err = exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying plain text: %v\n", err)

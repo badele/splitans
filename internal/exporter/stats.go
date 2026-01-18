@@ -8,6 +8,10 @@ import (
 	"github.com/badele/splitans/internal/types"
 )
 
+// ============================================================================
+// EXPORTED
+// ============================================================================
+
 func DisplayStats(tok types.TokenizerWithStats) {
 	type typeCount struct {
 		Type  types.TokenType
@@ -77,6 +81,10 @@ func DisplayStats(tok types.TokenizerWithStats) {
 		displayTopN(stats.C1Codes, 10)
 	}
 }
+
+// ============================================================================
+// PRIVATE
+// ============================================================================
 
 func displayTopN(data map[string]int, n int) {
 	type entry struct {

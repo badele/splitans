@@ -9,6 +9,10 @@ import (
 	"github.com/badele/splitans/internal/types"
 )
 
+// ============================================================================
+// EXPORTED
+// ============================================================================
+
 func ExportTokensToTable(tokens []types.Token, writer io.Writer) error {
 	fmt.Fprintln(writer, "\n┌─────────┬────────┬──────────────────────────────────────┬──────────────────────────────────────┬─────────────────┬──────────────────────────────────────┐")
 	fmt.Fprintf(writer, "│ %-7s │ %-6s │ %-36s │ %-36s │ %-15s │ %-36s │\n", "Token", "Pos", "CSISignification", "Signification", "Paramètres", "Raw/Texte")
@@ -90,6 +94,10 @@ func ExportTokensToTable(tokens []types.Token, writer io.Writer) error {
 
 	return nil
 }
+
+// ============================================================================
+// PRIVATE
+// ============================================================================
 
 func truncate(s string, maxLen int) string {
 	s = fmt.Sprintf("%q", s)

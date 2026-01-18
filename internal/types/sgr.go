@@ -24,24 +24,6 @@ type ColorValue struct {
 	Index   uint8
 }
 
-func (c ColorValue) IsDefault() bool {
-	return c.Type == ColorDefault
-}
-
-func (c ColorValue) String() string {
-	switch c.Type {
-	case ColorDefault:
-		return "default"
-	case ColorStandard:
-		return fmt.Sprintf("std:%d", c.Index)
-	case ColorIndexed:
-		return fmt.Sprintf("idx:%d", c.Index)
-	case ColorRGB:
-		return fmt.Sprintf("rgb(%d,%d,%d)", c.R, c.G, c.B)
-	}
-	return "unknown"
-}
-
 // VGA Palette with exact VGA hardware color values
 var VGAPalette = [16][3]uint8{
 	{0x00, 0x00, 0x00}, // 0: Black
@@ -77,6 +59,44 @@ type SGR struct {
 	Reverse       bool
 	Hidden        bool
 	Strikethrough bool
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// LINE WITH SEQUENCES
+/////////////////////////////////////////////////////////////////////////////
+
+// SGRSequence represents a SGR style at a specific position in a line
+type SGRSequence struct {
+	Position int  // Position of the character in the line (0-indexed)
+	SGR      *SGR // The SGR sequence to apply from this position
+}
+
+// LineWithSequences contains a line of text and all SGR changes within that line
+type LineWithSequences struct {
+	Text      string
+	Sequences []SGRSequence
+}
+
+// ============================================================================
+// EXPORTED
+// ============================================================================
+
+func (c ColorValue) IsDefault() bool {
+	return c.Type == ColorDefault
+}
+
+func (c ColorValue) String() string {
+	switch c.Type {
+	case ColorDefault:
+		return "default"
+	case ColorStandard:
+		return fmt.Sprintf("std:%d", c.Index)
+	case ColorIndexed:
+		return fmt.Sprintf("idx:%d", c.Index)
+	case ColorRGB:
+		return fmt.Sprintf("rgb(%d,%d,%d)", c.R, c.G, c.B)
+	}
+	return "unknown"
 }
 
 func NewSGR() *SGR {
@@ -156,40 +176,6 @@ func (s *SGR) ApplyParams(params []int) {
 			s.BgColor = ColorValue{Type: ColorStandard, Index: uint8(code - 100 + 8)}
 		}
 	}
-}
-
-func (s *SGR) applyExtendedColor(color *ColorValue, params []int, start int) int {
-	if start >= len(params) {
-		return 0
-	}
-
-	colorType := params[start]
-
-	switch colorType {
-	case 5: // Indexed color (256 colors)
-		// ESC[38;5;n
-		if start+1 < len(params) {
-			*color = ColorValue{
-				Type:  ColorIndexed,
-				Index: uint8(params[start+1]),
-			}
-			return 2
-		}
-
-	case 2: // RGB color
-		// ESC[38;2;r;g;b
-		if start+3 < len(params) {
-			*color = ColorValue{
-				Type: ColorRGB,
-				R:    uint8(params[start+1]),
-				G:    uint8(params[start+2]),
-				B:    uint8(params[start+3]),
-			}
-			return 4
-		}
-	}
-
-	return 1
 }
 
 func (s *SGR) ToANSI(useVGAColors bool, legacyMode bool) string {
@@ -365,9 +351,181 @@ func (s *SGR) Copy() *SGR {
 	}
 }
 
-/////////////////////////////////////////////////////////////////////////////
-// DIFFERENTIAL SGR ENCODING
-/////////////////////////////////////////////////////////////////////////////
+// Diff returns the minimal set of SGR codes to transition from previous to current state.
+// If previous is nil, returns full state codes.
+// If legacyMode is true, uses [0m + full state when any attribute needs to be turned OFF.
+// If legacyMode is false, uses individual OFF codes (22, 23, 24, etc.).
+func (s *SGR) Diff(previous *SGR, legacyMode bool) []int {
+	// Handle nil previous - return full state
+	if previous == nil {
+		return s.toFullCodesLegacy(legacyMode)
+	}
+
+	// If equal, no changes needed
+	if s.Equals(previous) {
+		return nil
+	}
+
+	// Check if current is default state (full reset)
+	if s.Equals(NewSGR()) {
+		return []int{0}
+	}
+
+	// In legacy mode, if any attribute needs to be turned OFF, use reset + full state
+	if legacyMode && s.hasAttributeTurnedOff(previous) {
+		codes := []int{0}
+		codes = append(codes, s.toFullCodesLegacy(legacyMode)...)
+		return codes
+	}
+
+	// Calculate differential codes
+	var codes []int
+
+	// Boolean attributes with their ON/OFF codes
+	// In legacy mode, don't add bold separately if we have bright FG color
+	addBold := s.Bold != previous.Bold
+	if legacyMode && s.FgColor != previous.FgColor && !s.FgColor.IsDefault() && s.FgColor.Type == ColorStandard && s.FgColor.Index >= 8 {
+		addBold = false // Bold will be added by fgColorCodesLegacy
+	}
+
+	if addBold {
+		if s.Bold {
+			codes = append(codes, 1)
+		} else {
+			codes = append(codes, 22) // Bold off
+		}
+	}
+
+	if s.Dim != previous.Dim {
+		if s.Dim {
+			codes = append(codes, 2)
+		} else {
+			codes = append(codes, 22) // Dim off (same as bold off)
+		}
+	}
+
+	if s.Italic != previous.Italic {
+		if s.Italic {
+			codes = append(codes, 3)
+		} else {
+			codes = append(codes, 23)
+		}
+	}
+
+	if s.Underline != previous.Underline {
+		if s.Underline {
+			codes = append(codes, 4)
+		} else {
+			codes = append(codes, 24)
+		}
+	}
+
+	if s.Blink != previous.Blink {
+		if s.Blink {
+			codes = append(codes, 5)
+		} else {
+			codes = append(codes, 25)
+		}
+	}
+
+	if s.Reverse != previous.Reverse {
+		if s.Reverse {
+			codes = append(codes, 7)
+		} else {
+			codes = append(codes, 27)
+		}
+	}
+
+	if s.Hidden != previous.Hidden {
+		if s.Hidden {
+			codes = append(codes, 8)
+		} else {
+			codes = append(codes, 28)
+		}
+	}
+
+	if s.Strikethrough != previous.Strikethrough {
+		if s.Strikethrough {
+			codes = append(codes, 9)
+		} else {
+			codes = append(codes, 29)
+		}
+	}
+
+	// Foreground color
+	if s.FgColor != previous.FgColor {
+		codes = append(codes, s.fgColorCodesLegacy(legacyMode)...)
+	}
+
+	// Background color
+	if s.BgColor != previous.BgColor {
+		codes = append(codes, s.bgColorCodesLegacy(legacyMode)...)
+	}
+
+	return codes
+}
+
+// DiffToANSI generates the minimal ANSI escape sequence to transition from previous to current state.
+// If legacyMode is true, uses [0m + full state when attributes need to be turned OFF (ANSI 1990 compatible).
+// If legacyMode is false, uses individual OFF codes (modern terminals).
+func (s *SGR) DiffToANSI(previous *SGR, useVGAColors bool, legacyMode bool) string {
+	codes := s.Diff(previous, legacyMode)
+
+	if len(codes) == 0 {
+		return "" // No change needed
+	}
+
+	// Special handling for VGA colors mode
+	if useVGAColors {
+		return s.diffToVGAColors(previous, legacyMode)
+	}
+
+	// Build the escape sequence
+	var parts []string
+	for _, code := range codes {
+		parts = append(parts, fmt.Sprintf("%d", code))
+	}
+
+	return fmt.Sprintf("\x1b[%sm", strings.Join(parts, ";"))
+}
+
+// ============================================================================
+// PRIVATE
+// ============================================================================
+
+func (s *SGR) applyExtendedColor(color *ColorValue, params []int, start int) int {
+	if start >= len(params) {
+		return 0
+	}
+
+	colorType := params[start]
+
+	switch colorType {
+	case 5: // Indexed color (256 colors)
+		// ESC[38;5;n
+		if start+1 < len(params) {
+			*color = ColorValue{
+				Type:  ColorIndexed,
+				Index: uint8(params[start+1]),
+			}
+			return 2
+		}
+
+	case 2: // RGB color
+		// ESC[38;2;r;g;b
+		if start+3 < len(params) {
+			*color = ColorValue{
+				Type: ColorRGB,
+				R:    uint8(params[start+1]),
+				G:    uint8(params[start+2]),
+				B:    uint8(params[start+3]),
+			}
+			return 4
+		}
+	}
+
+	return 1
+}
 
 // countActiveAttributes returns the number of non-default attributes
 func (s *SGR) countActiveAttributes() int {
@@ -582,144 +740,6 @@ func (s *SGR) toFullCodes() []int {
 	return s.toFullCodesLegacy(false)
 }
 
-// Diff returns the minimal set of SGR codes to transition from previous to current state.
-// If previous is nil, returns full state codes.
-// If legacyMode is true, uses [0m + full state when any attribute needs to be turned OFF.
-// If legacyMode is false, uses individual OFF codes (22, 23, 24, etc.).
-func (s *SGR) Diff(previous *SGR, legacyMode bool) []int {
-	// Handle nil previous - return full state
-	if previous == nil {
-		return s.toFullCodesLegacy(legacyMode)
-	}
-
-	// If equal, no changes needed
-	if s.Equals(previous) {
-		return nil
-	}
-
-	// Check if current is default state (full reset)
-	if s.Equals(NewSGR()) {
-		return []int{0}
-	}
-
-	// In legacy mode, if any attribute needs to be turned OFF, use reset + full state
-	if legacyMode && s.hasAttributeTurnedOff(previous) {
-		codes := []int{0}
-		codes = append(codes, s.toFullCodesLegacy(legacyMode)...)
-		return codes
-	}
-
-	// Calculate differential codes
-	var codes []int
-
-	// Boolean attributes with their ON/OFF codes
-	// In legacy mode, don't add bold separately if we have bright FG color
-	addBold := s.Bold != previous.Bold
-	if legacyMode && s.FgColor != previous.FgColor && !s.FgColor.IsDefault() && s.FgColor.Type == ColorStandard && s.FgColor.Index >= 8 {
-		addBold = false // Bold will be added by fgColorCodesLegacy
-	}
-
-	if addBold {
-		if s.Bold {
-			codes = append(codes, 1)
-		} else {
-			codes = append(codes, 22) // Bold off
-		}
-	}
-
-	if s.Dim != previous.Dim {
-		if s.Dim {
-			codes = append(codes, 2)
-		} else {
-			codes = append(codes, 22) // Dim off (same as bold off)
-		}
-	}
-
-	if s.Italic != previous.Italic {
-		if s.Italic {
-			codes = append(codes, 3)
-		} else {
-			codes = append(codes, 23)
-		}
-	}
-
-	if s.Underline != previous.Underline {
-		if s.Underline {
-			codes = append(codes, 4)
-		} else {
-			codes = append(codes, 24)
-		}
-	}
-
-	if s.Blink != previous.Blink {
-		if s.Blink {
-			codes = append(codes, 5)
-		} else {
-			codes = append(codes, 25)
-		}
-	}
-
-	if s.Reverse != previous.Reverse {
-		if s.Reverse {
-			codes = append(codes, 7)
-		} else {
-			codes = append(codes, 27)
-		}
-	}
-
-	if s.Hidden != previous.Hidden {
-		if s.Hidden {
-			codes = append(codes, 8)
-		} else {
-			codes = append(codes, 28)
-		}
-	}
-
-	if s.Strikethrough != previous.Strikethrough {
-		if s.Strikethrough {
-			codes = append(codes, 9)
-		} else {
-			codes = append(codes, 29)
-		}
-	}
-
-	// Foreground color
-	if s.FgColor != previous.FgColor {
-		codes = append(codes, s.fgColorCodesLegacy(legacyMode)...)
-	}
-
-	// Background color
-	if s.BgColor != previous.BgColor {
-		codes = append(codes, s.bgColorCodesLegacy(legacyMode)...)
-	}
-
-	return codes
-}
-
-// DiffToANSI generates the minimal ANSI escape sequence to transition from previous to current state.
-// If legacyMode is true, uses [0m + full state when attributes need to be turned OFF (ANSI 1990 compatible).
-// If legacyMode is false, uses individual OFF codes (modern terminals).
-func (s *SGR) DiffToANSI(previous *SGR, useVGAColors bool, legacyMode bool) string {
-	codes := s.Diff(previous, legacyMode)
-
-	if len(codes) == 0 {
-		return "" // No change needed
-	}
-
-	// Special handling for VGA colors mode
-	if useVGAColors {
-		return s.diffToVGAColors(previous, legacyMode)
-	}
-
-	// Build the escape sequence
-	var parts []string
-	for _, code := range codes {
-		parts = append(parts, fmt.Sprintf("%d", code))
-	}
-
-	return fmt.Sprintf("\x1b[%sm", strings.Join(parts, ";"))
-}
-
 // diffToVGAColors handles differential encoding with VGA RGB color conversion
 func (s *SGR) diffToVGAColors(previous *SGR, legacyMode bool) string {
 	// For VGA mode, we need to convert standard colors to RGB
@@ -887,20 +907,4 @@ func (s *SGR) diffToVGAColors(previous *SGR, legacyMode bool) string {
 		return ""
 	}
 	return fmt.Sprintf("\x1b[%sm", strings.Join(codes, ";"))
-}
-
-/////////////////////////////////////////////////////////////////////////////
-// LINE WITH SEQUENCES
-/////////////////////////////////////////////////////////////////////////////
-
-// SGRSequence represents a SGR style at a specific position in a line
-type SGRSequence struct {
-	Position int  // Position of the character in the line (0-indexed)
-	SGR      *SGR // The SGR sequence to apply from this position
-}
-
-// LineWithSequences contains a line of text and all SGR changes within that line
-type LineWithSequences struct {
-	Text      string
-	Sequences []SGRSequence
 }

@@ -22,6 +22,10 @@ var neotexBgColors = []string{
 	"Bk", "Br", "Bg", "By", "Bb", "Bm", "Bc", "Bw", // 0-7: normal
 }
 
+// ============================================================================
+// EXPORTED
+// ============================================================================
+
 // SGRToNeotex converts an types.SGR struct to neotex format strings
 func SGRToNeotex(sgr *types.SGR) []string {
 	codes := []string{}
@@ -83,47 +87,6 @@ func SGRToNeotex(sgr *types.SGR) []string {
 	}
 
 	return codes
-}
-
-// fgColorToNeotex generates neotex code for foreground color
-func fgColorToNeotex(sgr *types.SGR) []string {
-	switch sgr.FgColor.Type {
-	case types.ColorStandard:
-		colorIndex := sgr.FgColor.Index
-		if sgr.Bold && colorIndex < 8 {
-			colorIndex += 8
-		}
-		if int(colorIndex) < len(neotexFgColors) {
-			return []string{neotexFgColors[colorIndex]}
-		}
-
-	case types.ColorRGB:
-		return []string{fmt.Sprintf("F%02X%02X%02X", sgr.FgColor.R, sgr.FgColor.G, sgr.FgColor.B)}
-
-	case types.ColorIndexed:
-		return []string{fmt.Sprintf("F%d", sgr.FgColor.Index)}
-	}
-
-	return nil
-}
-
-// bgColorToNeotex generates neotex code for background color
-func bgColorToNeotex(sgr *types.SGR) []string {
-	switch sgr.BgColor.Type {
-	case types.ColorStandard:
-		colorIndex := sgr.BgColor.Index
-		if int(colorIndex) < len(neotexBgColors) {
-			return []string{neotexBgColors[colorIndex]}
-		}
-
-	case types.ColorRGB:
-		return []string{fmt.Sprintf("B%02X%02X%02X", sgr.BgColor.R, sgr.BgColor.G, sgr.BgColor.B)}
-
-	case types.ColorIndexed:
-		return []string{fmt.Sprintf("B%d", sgr.BgColor.Index)}
-	}
-
-	return nil
 }
 
 // DiffSGRToNeotex generates minimal neotex codes to transition from previous to current SGR state
@@ -236,6 +199,77 @@ func DiffSGRToNeotex(current, previous *types.SGR) []string {
 	return codes
 }
 
+// ExportToNeotex exports processor.VirtualTerminal buffer to neotex format with differential encoding.
+// Returns (text, sequences) where:
+// - text is the plain text content
+// - sequences is the neotex format sequences with positions (per line)
+// Uses differential encoding to minimize the number of codes by only outputting changes.
+func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
+	return exportToNeotex(vt, false)
+}
+
+// ExportToInlineNeotex exports the buffer to neotex format, flattening all lines into one.
+func ExportToInlineNeotex(vt *processor.VirtualTerminal) (string, string) {
+	return exportToNeotex(vt, true)
+}
+
+// ExportFlattenedNeotex exports tokens to neotex format (always UTF-8)
+// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
+func ExportFlattenedNeotex(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, false, crop)
+}
+
+// ExportFlattenedNeotexInline exports tokens to inline neotex format (always UTF-8)
+// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
+func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, true, crop)
+}
+
+// ============================================================================
+// PRIVATE
+// ============================================================================
+
+// fgColorToNeotex generates neotex code for foreground color
+func fgColorToNeotex(sgr *types.SGR) []string {
+	switch sgr.FgColor.Type {
+	case types.ColorStandard:
+		colorIndex := sgr.FgColor.Index
+		if sgr.Bold && colorIndex < 8 {
+			colorIndex += 8
+		}
+		if int(colorIndex) < len(neotexFgColors) {
+			return []string{neotexFgColors[colorIndex]}
+		}
+
+	case types.ColorRGB:
+		return []string{fmt.Sprintf("F%02X%02X%02X", sgr.FgColor.R, sgr.FgColor.G, sgr.FgColor.B)}
+
+	case types.ColorIndexed:
+		return []string{fmt.Sprintf("F%d", sgr.FgColor.Index)}
+	}
+
+	return nil
+}
+
+// bgColorToNeotex generates neotex code for background color
+func bgColorToNeotex(sgr *types.SGR) []string {
+	switch sgr.BgColor.Type {
+	case types.ColorStandard:
+		colorIndex := sgr.BgColor.Index
+		if int(colorIndex) < len(neotexBgColors) {
+			return []string{neotexBgColors[colorIndex]}
+		}
+
+	case types.ColorRGB:
+		return []string{fmt.Sprintf("B%02X%02X%02X", sgr.BgColor.R, sgr.BgColor.G, sgr.BgColor.B)}
+
+	case types.ColorIndexed:
+		return []string{fmt.Sprintf("B%d", sgr.BgColor.Index)}
+	}
+
+	return nil
+}
+
 func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWithSequences {
 	if len(lines) <= 1 {
 		return lines
@@ -267,20 +301,6 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 		Text:      textBuilder.String(),
 		Sequences: flattenedSeqs,
 	}}
-}
-
-// ExportToNeotex exports processor.VirtualTerminal buffer to neotex format with differential encoding.
-// Returns (text, sequences) where:
-// - text is the plain text content
-// - sequences is the neotex format sequences with positions (per line)
-// Uses differential encoding to minimize the number of codes by only outputting changes.
-func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
-	return exportToNeotex(vt, false)
-}
-
-// ExportToInlineNeotex exports the buffer to neotex format, flattening all lines into one.
-func ExportToInlineNeotex(vt *processor.VirtualTerminal) (string, string) {
-	return exportToNeotex(vt, true)
 }
 
 func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string) {
@@ -363,18 +383,6 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 	}
 
 	return textBuilder.String(), seqBuilder.String()
-}
-
-// ExportFlattenedNeotex exports tokens to neotex format (always UTF-8)
-// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedNeotex(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
-	return exportFlattenedNeotex(width, nblines, tokens, false, crop)
-}
-
-// ExportFlattenedNeotexInline exports tokens to inline neotex format (always UTF-8)
-// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
-	return exportFlattenedNeotex(width, nblines, tokens, true, crop)
 }
 
 func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion) (string, string, int, error) {

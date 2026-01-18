@@ -110,6 +110,10 @@ var VGAPalette = types.VGAPalette
 // C0Names maps C0 control codes to their names
 var C0Names = types.C0Names
 
+// ============================================================================
+// PRIVATE
+// ============================================================================
+
 // UTF-8 BOM (Byte Order Mark) sequence
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
@@ -120,6 +124,10 @@ func stripUTF8BOM(data []byte) []byte {
 	}
 	return data
 }
+
+// ============================================================================
+// EXPORTED
+// ============================================================================
 
 // ConvertToUTF8 converts byte data from a source encoding to UTF-8.
 // Supported encodings: "utf8", "cp437", "cp850", "iso-8859-1"
@@ -285,4 +293,17 @@ func SGRToNeotex(sgr *SGR) []string {
 // DiffSGRToNeotex generates minimal neotex codes to transition between SGR states.
 func DiffSGRToNeotex(current, previous *SGR) []string {
 	return exporter.DiffSGRToNeotex(current, previous)
+}
+
+// ExportToNeotex exports VirtualTerminal buffer to neotex format with differential encoding.
+// Returns (text, sequences) where text is plain content and sequences contains position-based style codes.
+func ExportToNeotex(vt *VirtualTerminal) (string, string) {
+	return exporter.ExportToNeotex(vt)
+}
+
+// ExportToInlineNeotex exports VirtualTerminal buffer to inline neotex format.
+// All lines are flattened into a single line with adjusted sequence positions.
+// Returns (text, sequences) where text is plain content and sequences contains position-based style codes.
+func ExportToInlineNeotex(vt *VirtualTerminal) (string, string) {
+	return exporter.ExportToInlineNeotex(vt)
 }

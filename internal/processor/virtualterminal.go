@@ -41,6 +41,10 @@ type ContentBounds struct {
 	Empty  bool // True if no content found
 }
 
+// ============================================================================
+// EXPORTED
+// ============================================================================
+
 func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors bool) *VirtualTerminal {
 	defaultSGR := types.NewSGR()
 	buffer := make([][]types.Cell, height)
@@ -66,6 +70,7 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 		ignoreWrapCRLF: true,
 	}
 }
+
 func (vt *VirtualTerminal) GetWidth() int {
 	return vt.width
 }
@@ -95,6 +100,243 @@ func (vt *VirtualTerminal) ApplyTokens(tokens []types.Token) error {
 	}
 	return nil
 }
+
+// ExportFlattenedANSI exports the buffer with optimized ANSI codes using differential encoding.
+// Uses ExportSplitTextAndSequences and applies minimal SGR codes at the appropriate positions.
+// The legacyMode ensures ANSI 1990 compatibility by using reset+rebuild
+// when attributes need to be turned OFF, rather than using codes like [22m, [23m, etc.
+func (vt *VirtualTerminal) ExportFlattenedANSI() string {
+	return vt.exportFlattenedANSI(false)
+}
+
+// ExportFlattenedANSIInline exports the buffer as a single line with minimal ANSI codes.
+func (vt *VirtualTerminal) ExportFlattenedANSIInline() string {
+	return vt.exportFlattenedANSI(true)
+}
+
+// ExportPlainText exports the buffer as plain text without ANSI codes
+// Uses ExportSplitTextAndSequences and extracts only the text part
+func (vt *VirtualTerminal) ExportPlainText() string {
+	return vt.exportPlainText(false)
+}
+
+// ExportPlainTextInline exports the buffer as plain text without newlines.
+func (vt *VirtualTerminal) ExportPlainTextInline() string {
+	return vt.exportPlainText(true)
+}
+
+// ExportSplitTextAndSequences exports the buffer as separate text and sequences
+// Returns a slice of LineWithSequences, each containing the plain text and SGR changes
+func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequences {
+	result := []types.LineWithSequences{}
+	var currentSGR *types.SGR = nil
+
+	maxCursorY := 0
+	for y := 0; y < vt.height; y++ {
+
+		// Check if line has content
+		for x := 0; x < vt.width; x++ {
+			if vt.buffer[y][x].Char != 0x0 {
+				maxCursorY = max(maxCursorY, y)
+				break
+			}
+		}
+
+		line := types.LineWithSequences{
+			Text:      "",
+			Sequences: []types.SGRSequence{},
+		}
+
+		var textBuilder strings.Builder
+
+		for x := 0; x < vt.width; x++ {
+			cell := vt.buffer[y][x]
+
+			// fmt.Printf("Processing cell at (%d, %d): Char='%c' SGR='%v'\n", x, y, cell.Char, cell.SGR)
+
+			// Detect SGR change
+			if !cell.SGR.Equals(currentSGR) {
+				line.Sequences = append(line.Sequences, types.SGRSequence{
+					Position: x,
+					SGR:      cell.SGR.Copy(),
+				})
+				currentSGR = cell.SGR.Copy()
+
+				// fmt.Printf("  Detected SGR change at position %d: New SGR='%v'\n", x, cell.SGR)
+			}
+
+			// Add character to text (replace 0x0 with space)
+			char := cell.Char
+			if vt.outputEncoding == "utf8" && char == 0x0 {
+				char = ' '
+			}
+
+			textBuilder.WriteRune(char)
+		}
+
+		line.Text = textBuilder.String()
+
+		result = append(result, line)
+	}
+
+	return result[:maxCursorY+1]
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Buffer Access and Manipulation
+///////////////////////////////////////////////////////////////////////////////
+
+// GetBuffer returns a deep copy of the buffer with all cells and their styles.
+// Each cell contains the character and its complete SGR state.
+// Useful for extracting raw buffer data for manipulation or cropping.
+func (vt *VirtualTerminal) GetBuffer() [][]types.Cell {
+	result := make([][]types.Cell, vt.height)
+	for y := 0; y < vt.height; y++ {
+		result[y] = make([]types.Cell, vt.width)
+		for x := 0; x < vt.width; x++ {
+			result[y][x] = vt.buffer[y][x].Copy()
+		}
+	}
+	return result
+}
+
+// GetHeight returns the height of the virtual terminal buffer.
+func (vt *VirtualTerminal) GetHeight() int {
+	return vt.height
+}
+
+// GetContentBounds calculates the bounding box of actual content.
+// Ignores only null characters (0x00). Spaces are considered content.
+// Returns ContentBounds with Empty=true if no content found.
+func (vt *VirtualTerminal) GetContentBounds() ContentBounds {
+	minX, minY := vt.width, vt.height
+	maxX, maxY := -1, -1
+
+	for y := 0; y < vt.height; y++ {
+		for x := 0; x < vt.width; x++ {
+			if vt.buffer[y][x].Char != 0 {
+				minX = min(minX, x)
+				maxX = max(maxX, x)
+				minY = min(minY, y)
+				maxY = max(maxY, y)
+			}
+		}
+	}
+
+	if maxX == -1 {
+		return ContentBounds{Empty: true}
+	}
+
+	return ContentBounds{
+		MinX:   minX,
+		MaxX:   maxX,
+		MinY:   minY,
+		MaxY:   maxY,
+		Width:  maxX - minX + 1,
+		Height: maxY - minY + 1,
+		Empty:  false,
+	}
+}
+
+// NewVirtualTerminalFromCells creates a VirtualTerminal from a cell buffer.
+// Useful for reconstructing a VT after cropping or manipulation.
+func NewVirtualTerminalFromCells(cells [][]types.Cell, outputEncoding string, useVGAColors bool) *VirtualTerminal {
+	if len(cells) == 0 {
+		return NewVirtualTerminal(0, 0, outputEncoding, useVGAColors)
+	}
+
+	height := len(cells)
+	width := len(cells[0])
+
+	vt := NewVirtualTerminal(width, height, outputEncoding, useVGAColors)
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width && x < len(cells[y]); x++ {
+			vt.buffer[y][x] = cells[y][x].Copy()
+		}
+	}
+
+	return vt
+}
+
+// Crop extracts a rectangular region from the buffer and returns a new VirtualTerminal.
+// Coordinates are 0-indexed. Returns nil if region is invalid.
+// The cropped VT preserves all cell styles (colors, effects).
+func (vt *VirtualTerminal) Crop(x, y, width, height int) *VirtualTerminal {
+	// Validation
+	if x < 0 || y < 0 || width <= 0 || height <= 0 {
+		return nil
+	}
+	if x >= vt.width || y >= vt.height {
+		return nil
+	}
+
+	// Adjust if region exceeds bounds
+	if x+width > vt.width {
+		width = vt.width - x
+	}
+	if y+height > vt.height {
+		height = vt.height - y
+	}
+
+	// Create the new buffer
+	cells := make([][]types.Cell, height)
+	for dy := 0; dy < height; dy++ {
+		cells[dy] = make([]types.Cell, width)
+		for dx := 0; dx < width; dx++ {
+			cells[dy][dx] = vt.buffer[y+dy][x+dx].Copy()
+		}
+	}
+
+	return NewVirtualTerminalFromCells(cells, vt.outputEncoding, vt.useVGAColors)
+}
+
+// Paste copies the content of source into the current VT at position (x, y).
+// Cells with Char == 0 are treated as transparent and are not copied.
+// If source extends beyond the destination bounds, it is clipped.
+// Returns error if coordinates are negative.
+func (vt *VirtualTerminal) Paste(source *VirtualTerminal, x, y int) error {
+	if x < 0 || y < 0 {
+		return fmt.Errorf("invalid position: (%d, %d)", x, y)
+	}
+
+	for sy := 0; sy < source.height; sy++ {
+		dy := y + sy
+		if dy >= vt.height {
+			break // Exceeded vertical bounds
+		}
+		for sx := 0; sx < source.width; sx++ {
+			dx := x + sx
+			if dx >= vt.width {
+				break // Exceeded horizontal bounds
+			}
+			// Skip transparent cells (Char == 0)
+			if source.buffer[sy][sx].Char == 0 {
+				continue
+			}
+			vt.buffer[dy][dx] = source.buffer[sy][sx].Copy()
+		}
+	}
+
+	return nil
+}
+
+// Fill sets all cells in the buffer to the specified character and SGR style.
+// Useful for creating colored backgrounds before compositing.
+func (vt *VirtualTerminal) Fill(char rune, sgr *types.SGR) {
+	for y := 0; y < vt.height; y++ {
+		for x := 0; x < vt.width; x++ {
+			vt.buffer[y][x] = types.Cell{
+				Char: char,
+				SGR:  sgr.Copy(),
+			}
+		}
+	}
+}
+
+// ============================================================================
+// PRIVATE
+// ============================================================================
 
 func (vt *VirtualTerminal) applyToken(token types.Token) error {
 	switch token.Type {
@@ -437,19 +679,6 @@ func (vt *VirtualTerminal) eraseLine(mode int) {
 	}
 }
 
-// ExportFlattenedANSI exports the buffer with optimized ANSI codes using differential encoding.
-// Uses ExportSplitTextAndSequences and applies minimal SGR codes at the appropriate positions.
-// The legacyMode ensures ANSI 1990 compatibility by using reset+rebuild
-// when attributes need to be turned OFF, rather than using codes like [22m, [23m, etc.
-func (vt *VirtualTerminal) ExportFlattenedANSI() string {
-	return vt.exportFlattenedANSI(false)
-}
-
-// ExportFlattenedANSIInline exports the buffer as a single line with minimal ANSI codes.
-func (vt *VirtualTerminal) ExportFlattenedANSIInline() string {
-	return vt.exportFlattenedANSI(true)
-}
-
 func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
 	lines := vt.ExportSplitTextAndSequences()
 	var builder strings.Builder
@@ -501,17 +730,6 @@ func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
 	return builder.String()
 }
 
-// ExportPlainText exports the buffer as plain text without ANSI codes
-// Uses ExportSplitTextAndSequences and extracts only the text part
-func (vt *VirtualTerminal) ExportPlainText() string {
-	return vt.exportPlainText(false)
-}
-
-// ExportPlainTextInline exports the buffer as plain text without newlines.
-func (vt *VirtualTerminal) ExportPlainTextInline() string {
-	return vt.exportPlainText(true)
-}
-
 func (vt *VirtualTerminal) exportPlainText(inline bool) string {
 	lines := vt.ExportSplitTextAndSequences()
 
@@ -525,213 +743,4 @@ func (vt *VirtualTerminal) exportPlainText(inline bool) string {
 	}
 
 	return builder.String()
-}
-
-// ExportSplitTextAndSequences exports the buffer as separate text and sequences
-// Returns a slice of LineWithSequences, each containing the plain text and SGR changes
-func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequences {
-	result := []types.LineWithSequences{}
-	var currentSGR *types.SGR = nil
-
-	maxCursorY := 0
-	for y := 0; y < vt.height; y++ {
-
-		// Check if line has content
-		for x := 0; x < vt.width; x++ {
-			if vt.buffer[y][x].Char != 0x0 {
-				maxCursorY = max(maxCursorY, y)
-				break
-			}
-		}
-
-		line := types.LineWithSequences{
-			Text:      "",
-			Sequences: []types.SGRSequence{},
-		}
-
-		var textBuilder strings.Builder
-
-		for x := 0; x < vt.width; x++ {
-			cell := vt.buffer[y][x]
-
-			// fmt.Printf("Processing cell at (%d, %d): Char='%c' SGR='%v'\n", x, y, cell.Char, cell.SGR)
-
-			// Detect SGR change
-			if !cell.SGR.Equals(currentSGR) {
-				line.Sequences = append(line.Sequences, types.SGRSequence{
-					Position: x,
-					SGR:      cell.SGR.Copy(),
-				})
-				currentSGR = cell.SGR.Copy()
-
-				// fmt.Printf("  Detected SGR change at position %d: New SGR='%v'\n", x, cell.SGR)
-			}
-
-			// Add character to text (replace 0x0 with space)
-			char := cell.Char
-			if vt.outputEncoding == "utf8" && char == 0x0 {
-				char = ' '
-			}
-
-			textBuilder.WriteRune(char)
-		}
-
-		line.Text = textBuilder.String()
-
-		result = append(result, line)
-	}
-
-	return result[:maxCursorY+1]
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// Buffer Access and Manipulation
-///////////////////////////////////////////////////////////////////////////////
-
-// GetBuffer returns a deep copy of the buffer with all cells and their styles.
-// Each cell contains the character and its complete SGR state.
-// Useful for extracting raw buffer data for manipulation or cropping.
-func (vt *VirtualTerminal) GetBuffer() [][]types.Cell {
-	result := make([][]types.Cell, vt.height)
-	for y := 0; y < vt.height; y++ {
-		result[y] = make([]types.Cell, vt.width)
-		for x := 0; x < vt.width; x++ {
-			result[y][x] = vt.buffer[y][x].Copy()
-		}
-	}
-	return result
-}
-
-// GetHeight returns the height of the virtual terminal buffer.
-func (vt *VirtualTerminal) GetHeight() int {
-	return vt.height
-}
-
-// GetContentBounds calculates the bounding box of actual content.
-// Ignores only null characters (0x00). Spaces are considered content.
-// Returns ContentBounds with Empty=true if no content found.
-func (vt *VirtualTerminal) GetContentBounds() ContentBounds {
-	minX, minY := vt.width, vt.height
-	maxX, maxY := -1, -1
-
-	for y := 0; y < vt.height; y++ {
-		for x := 0; x < vt.width; x++ {
-			if vt.buffer[y][x].Char != 0 {
-				minX = min(minX, x)
-				maxX = max(maxX, x)
-				minY = min(minY, y)
-				maxY = max(maxY, y)
-			}
-		}
-	}
-
-	if maxX == -1 {
-		return ContentBounds{Empty: true}
-	}
-
-	return ContentBounds{
-		MinX:   minX,
-		MaxX:   maxX,
-		MinY:   minY,
-		MaxY:   maxY,
-		Width:  maxX - minX + 1,
-		Height: maxY - minY + 1,
-		Empty:  false,
-	}
-}
-
-// NewVirtualTerminalFromCells creates a VirtualTerminal from a cell buffer.
-// Useful for reconstructing a VT after cropping or manipulation.
-func NewVirtualTerminalFromCells(cells [][]types.Cell, outputEncoding string, useVGAColors bool) *VirtualTerminal {
-	if len(cells) == 0 {
-		return NewVirtualTerminal(0, 0, outputEncoding, useVGAColors)
-	}
-
-	height := len(cells)
-	width := len(cells[0])
-
-	vt := NewVirtualTerminal(width, height, outputEncoding, useVGAColors)
-
-	for y := 0; y < height; y++ {
-		for x := 0; x < width && x < len(cells[y]); x++ {
-			vt.buffer[y][x] = cells[y][x].Copy()
-		}
-	}
-
-	return vt
-}
-
-// Crop extracts a rectangular region from the buffer and returns a new VirtualTerminal.
-// Coordinates are 0-indexed. Returns nil if region is invalid.
-// The cropped VT preserves all cell styles (colors, effects).
-func (vt *VirtualTerminal) Crop(x, y, width, height int) *VirtualTerminal {
-	// Validation
-	if x < 0 || y < 0 || width <= 0 || height <= 0 {
-		return nil
-	}
-	if x >= vt.width || y >= vt.height {
-		return nil
-	}
-
-	// Adjust if region exceeds bounds
-	if x+width > vt.width {
-		width = vt.width - x
-	}
-	if y+height > vt.height {
-		height = vt.height - y
-	}
-
-	// Create the new buffer
-	cells := make([][]types.Cell, height)
-	for dy := 0; dy < height; dy++ {
-		cells[dy] = make([]types.Cell, width)
-		for dx := 0; dx < width; dx++ {
-			cells[dy][dx] = vt.buffer[y+dy][x+dx].Copy()
-		}
-	}
-
-	return NewVirtualTerminalFromCells(cells, vt.outputEncoding, vt.useVGAColors)
-}
-
-// Paste copies the content of source into the current VT at position (x, y).
-// Cells with Char == 0 are treated as transparent and are not copied.
-// If source extends beyond the destination bounds, it is clipped.
-// Returns error if coordinates are negative.
-func (vt *VirtualTerminal) Paste(source *VirtualTerminal, x, y int) error {
-	if x < 0 || y < 0 {
-		return fmt.Errorf("invalid position: (%d, %d)", x, y)
-	}
-
-	for sy := 0; sy < source.height; sy++ {
-		dy := y + sy
-		if dy >= vt.height {
-			break // Exceeded vertical bounds
-		}
-		for sx := 0; sx < source.width; sx++ {
-			dx := x + sx
-			if dx >= vt.width {
-				break // Exceeded horizontal bounds
-			}
-			// Skip transparent cells (Char == 0)
-			if source.buffer[sy][sx].Char == 0 {
-				continue
-			}
-			vt.buffer[dy][dx] = source.buffer[sy][sx].Copy()
-		}
-	}
-
-	return nil
-}
-
-// Fill sets all cells in the buffer to the specified character and SGR style.
-// Useful for creating colored backgrounds before compositing.
-func (vt *VirtualTerminal) Fill(char rune, sgr *types.SGR) {
-	for y := 0; y < vt.height; y++ {
-		for x := 0; x < vt.width; x++ {
-			vt.buffer[y][x] = types.Cell{
-				Char: char,
-				SGR:  sgr.Copy(),
-			}
-		}
-	}
 }

@@ -13,6 +13,10 @@ import (
 	"github.com/badele/splitans/pkg/splitans"
 )
 
+// ============================================================================
+// EXPORTED
+// ============================================================================
+
 type CLI struct {
 	File string `arg:"" optional:"" type:"path" help:"ANSI file to process (reads from stdin if not specified)"`
 
@@ -36,6 +40,10 @@ type CLI struct {
 		Debug bool `short:"d" help:"Enable debug mode (displays cursor positions)"`
 	} `embed:"" prefix:"" group:"Debug options:"`
 }
+
+// ============================================================================
+// PRIVATE
+// ============================================================================
 
 func ConcatenateTextAndSequence(leftText, rightText string, leftWidth int, separator string) string {
 	leftLines := strings.Split(leftText, "\n")

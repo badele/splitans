@@ -17,14 +17,19 @@ import (
 )
 
 type Tokenizer struct {
-	input   []byte
-	pos     int              // Position en octets dans input
-	runePos int              // Position en runes (caractères Unicode)
-	Tokens  []types.Token    `json:"tokens"`
-	Stats   types.TokenStats `json:"stats"`
+	input    []byte
+	encoding string           // Source encoding for SAUCE text field conversion
+	pos      int              // Position en octets dans input
+	runePos  int              // Position en runes (caractères Unicode)
+	Tokens   []types.Token    `json:"tokens"`
+	Stats    types.TokenStats `json:"stats"`
 }
 
 func NewANSITokenizer(input []byte) *Tokenizer {
+	return NewANSITokenizerWithEncoding(input, "utf8")
+}
+
+func NewANSITokenizerWithEncoding(input []byte, encoding string) *Tokenizer {
 	stats := types.TokenStats{
 		TokensByType:        make(map[types.TokenType]int),
 		SGRCodes:            make(map[string]int),
@@ -37,11 +42,12 @@ func NewANSITokenizer(input []byte) *Tokenizer {
 	}
 
 	return &Tokenizer{
-		input:   input,
-		pos:     0,
-		runePos: 0,
-		Tokens:  make([]types.Token, 0),
-		Stats:   stats,
+		input:    input,
+		encoding: encoding,
+		pos:      0,
+		runePos:  0,
+		Tokens:   make([]types.Token, 0),
+		Stats:    stats,
 	}
 }
 
@@ -149,14 +155,27 @@ func (t *Tokenizer) parseEscape(start int) {
 }
 
 func (t *Tokenizer) parseSauce(start int) {
-	t.pos++
+	// Capture everything from the EOF marker (0x1A) to the end
+	rawData := t.input[t.pos:]
 
-	t.Tokens = append(t.Tokens, types.Token{
+	token := types.Token{
 		Type: types.TokenSauce,
-		Pos:  t.pos,
-		Raw:  string(t.input[t.pos:]),
-	})
+		Pos:  t.runePos,
+		Raw:  string(rawData),
+	}
 
+	// Try to parse the SAUCE record with encoding conversion for text fields
+	// The SAUCE bytes were preserved without encoding conversion (binary data intact),
+	// so we need to convert text fields (Title, Author, Group, TInfoS) from source encoding.
+	if sauce, err := types.FromBytesWithEncoding(rawData, t.encoding); err == nil {
+		token.Sauce = sauce
+		token.Signification = fmt.Sprintf("SAUCE: %s by %s (%dx%d)",
+			sauce.Title, sauce.Author, sauce.TInfo1, sauce.TInfo2)
+	} else {
+		token.Signification = "Invalid SAUCE record"
+	}
+
+	t.Tokens = append(t.Tokens, token)
 	t.pos = len(t.input)
 	t.runePos = t.pos
 }

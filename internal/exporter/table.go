@@ -75,6 +75,20 @@ func ExportTokensToTable(tokens []types.Token, writer io.Writer) error {
 			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)
 			rawOrText = truncate(token.Raw, 36)
 
+		case types.TokenSauce:
+			csiSignification = "-"
+			if token.Sauce != nil {
+				signification = truncate(token.Signification, 36)
+				// Show key SAUCE fields in params column
+				params = fmt.Sprintf("%dx%d", token.Sauce.TInfo1, token.Sauce.TInfo2)
+				// Show title/author in raw column
+				rawOrText = truncate(fmt.Sprintf("%s / %s", token.Sauce.Title, token.Sauce.Author), 36)
+			} else {
+				signification = "Invalid SAUCE record"
+				params = "-"
+				rawOrText = truncate(token.Raw, 36)
+			}
+
 		default:
 			csiSignification = "-"
 			signification = "UNKNOWN"

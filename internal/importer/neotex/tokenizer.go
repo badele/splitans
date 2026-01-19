@@ -246,6 +246,9 @@ func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []str
 }
 
 func (t *Tokenizer) Tokenize() []types.Token {
+	// Extract metadata including SAUCE from sequence lines
+	meta := ExtractMetadata(t.seqLines)
+
 	// Convert neotex format to ANSI format
 	ansiData := ConvertNeotexToANSI(t.textLines, t.seqLines)
 
@@ -253,6 +256,17 @@ func (t *Tokenizer) Tokenize() []types.Token {
 	ansiTokenizer := ansi.NewANSITokenizer(ansiData)
 	t.Tokens = ansiTokenizer.Tokenize()
 	t.Stats = ansiTokenizer.GetStats()
+
+	// If SAUCE metadata was found, add a TokenSauce token
+	if meta.Sauce != nil {
+		sauceToken := types.Token{
+			Type:          types.TokenSauce,
+			Pos:           len(t.Tokens),
+			Sauce:         meta.Sauce,
+			Signification: fmt.Sprintf("SAUCE: %s by %s (%dx%d)", meta.Sauce.Title, meta.Sauce.Author, meta.Sauce.TInfo1, meta.Sauce.TInfo2),
+		}
+		t.Tokens = append(t.Tokens, sauceToken)
+	}
 
 	return t.Tokens
 }

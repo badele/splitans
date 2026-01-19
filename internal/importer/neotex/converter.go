@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/badele/splitans/internal/types"
 )
@@ -15,15 +16,20 @@ type NeotexMetadata struct {
 	Width        int               // Total width (!TW73/80 -> 80)
 	NbLines      int               // Number of lines with content (!NL<n>)
 	Extra        map[string]string // Other metadata (!key:value)
+	Sauce        *types.Sauce      // SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
 }
 
 // ExtractMetadata extracts metadata from sequence lines
 // Metadata entries start with '!' (e.g., !V1 for version)
+// Also extracts SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
 func ExtractMetadata(seqLines []string) NeotexMetadata {
 	meta := NeotexMetadata{
 		Version: 0, // 0 means no version found (legacy format)
 		Extra:   make(map[string]string),
 	}
+
+	// Collect all tokens for SAUCE parsing
+	var allTokens []string
 
 	for _, seqLine := range seqLines {
 		entries := strings.Split(seqLine, ";")
@@ -33,20 +39,23 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 				continue
 			}
 
-			// Remove '!' prefix
-			entry = entry[1:]
+			// Collect token for SAUCE parsing (with '!' prefix)
+			allTokens = append(allTokens, entry)
+
+			// Remove '!' prefix for other metadata
+			entryWithoutPrefix := entry[1:]
 
 			// Check for version: V<number>
-			if strings.HasPrefix(entry, "V") {
-				if v, err := strconv.Atoi(entry[1:]); err == nil {
+			if strings.HasPrefix(entryWithoutPrefix, "V") {
+				if v, err := strconv.Atoi(entryWithoutPrefix[1:]); err == nil {
 					meta.Version = v
 				}
 				continue
 			}
 
 			// Check trimmed width TW<trimmed>/<total> or TW<number>
-			if strings.HasPrefix(entry, "TW") {
-				twValue := entry[2:]
+			if strings.HasPrefix(entryWithoutPrefix, "TW") {
+				twValue := entryWithoutPrefix[2:]
 				if parts := strings.Split(twValue, "/"); len(parts) == 2 {
 					// Format: TW73/80
 					if v, err := strconv.Atoi(parts[0]); err == nil {
@@ -60,21 +69,89 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 			}
 
 			// Check number of lines NL<number>
-			if strings.HasPrefix(entry, "NL") {
-				if v, err := strconv.Atoi(entry[2:]); err == nil {
+			if strings.HasPrefix(entryWithoutPrefix, "NL") {
+				if v, err := strconv.Atoi(entryWithoutPrefix[2:]); err == nil {
 					meta.NbLines = v
 				}
 				continue
 			}
 
 			// Other metadata: key:value
-			if parts := strings.SplitN(entry, ":", 2); len(parts) == 2 {
+			if parts := strings.SplitN(entryWithoutPrefix, ":", 2); len(parts) == 2 {
 				meta.Extra[parts[0]] = parts[1]
 			}
 		}
 	}
 
+	// Parse SAUCE metadata from collected tokens
+	meta.Sauce = parseSauceLabels(allTokens)
+
+	// Populate SAUCE dimensions from !TW and !NL if SAUCE exists
+	if meta.Sauce != nil {
+		if meta.Width > 0 {
+			meta.Sauce.TInfo1 = uint16(meta.Width)
+		}
+		if meta.NbLines > 0 {
+			meta.Sauce.TInfo2 = uint16(meta.NbLines)
+		}
+	}
+
 	return meta
+}
+
+// parseSauceLabels extracts SAUCE metadata from neotex labels.
+// All SAUCE labels start with "!S" prefix (e.g., !ST, !SA, !SG, !SD, !SF, !SI).
+// Note: !SW and !SH are still parsed for backward compatibility but dimensions
+// are now taken from !TW and !NL metadata.
+// Returns nil if no SAUCE labels are found.
+func parseSauceLabels(tokens []string) *types.Sauce {
+	var sauce *types.Sauce
+
+	for _, token := range tokens {
+		// All SAUCE labels start with "!S"
+		if !strings.HasPrefix(token, "!S") {
+			continue
+		}
+
+		// Create Sauce struct on first SAUCE label
+		if sauce == nil {
+			sauce = &types.Sauce{}
+		}
+
+		switch {
+		case strings.HasPrefix(token, "!ST<"):
+			sauce.Title = extractLabelValue(token)
+		case strings.HasPrefix(token, "!SA<"):
+			sauce.Author = extractLabelValue(token)
+		case strings.HasPrefix(token, "!SG<"):
+			sauce.Group = extractLabelValue(token)
+		case strings.HasPrefix(token, "!SD<"):
+			sauce.Date, _ = time.Parse("20060102", extractLabelValue(token))
+		case strings.HasPrefix(token, "!SW<"):
+			w, _ := strconv.Atoi(extractLabelValue(token))
+			sauce.TInfo1 = uint16(w)
+		case strings.HasPrefix(token, "!SH<"):
+			h, _ := strconv.Atoi(extractLabelValue(token))
+			sauce.TInfo2 = uint16(h)
+		case strings.HasPrefix(token, "!SF<"):
+			sauce.TInfoS = extractLabelValue(token)
+		case token == "!SI":
+			sauce.SetICEColors(true)
+		}
+	}
+
+	return sauce
+}
+
+// extractLabelValue extracts the value between < and > from a label.
+// e.g., "!ST<Fire Calendar 2025>" returns "Fire Calendar 2025"
+func extractLabelValue(label string) string {
+	start := strings.Index(label, "<")
+	end := strings.LastIndex(label, ">")
+	if start >= 0 && end > start {
+		return label[start+1 : end]
+	}
+	return ""
 }
 
 // ConvertNeotexToANSI converts neotex format (text + sequences) to raw ANSI format

@@ -28,12 +28,12 @@ type CLI struct {
 	Output struct {
 		Oformat   string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats" help:"Output format: ansi, json, neotex, plaintext, table, stats"`
 		Oencoding string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
-		Save      string `short:"S" type:"path" help:"Save to file (for -oformat option (neotex)"`
 		Width     int    `short:"W" default:"80" help:"Width text to specified width"`
 		Lines     int    `short:"L" default:"1000" help:"Nb lines text"`
 		Crop      string `short:"C" help:"Crop region: x,y:x1,y1 (1-indexed start:end coordinates)"`
 		Inline    bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
 		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
+		Sauce     bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
 	} `embed:"" prefix:"" group:"Output options:"`
 
 	Debug struct {
@@ -146,7 +146,8 @@ func main() {
 	/////////////////////////////////////////////////////////////////////////////
 	switch cli.Input.Iformat {
 	case "ansi":
-		tok = splitans.NewANSITokenizer(data)
+		// Pass source encoding to tokenizer for SAUCE text field conversion
+		tok = splitans.NewANSITokenizerWithEncoding(data, encoding)
 		tokens = tok.Tokenize()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ANSI parse error: %v\n", err)
@@ -178,16 +179,21 @@ func main() {
 		cli.Output.Width = decodedWidth
 	}
 
-	// Validate --write option usage
-	if cli.Output.Save != "" && cli.Output.Oformat != "neotex" {
-		fmt.Fprintf(os.Stderr, "Error: --write option can only be used with --oformat=neotex\n")
-		os.Exit(1)
+	// After tokenizing, check for SAUCE dimensions
+	// Priority: SAUCE > CLI defaults (user can still override with explicit -W/-L)
+	for _, token := range tokens {
+		if token.Type == types.TokenSauce && token.Sauce != nil {
+			// Use SAUCE width if CLI is at default value
+			if token.Sauce.TInfo1 > 0 && cli.Output.Width == 80 {
+				cli.Output.Width = int(token.Sauce.TInfo1)
+			}
+			// Use SAUCE height if CLI is at default value
+			if token.Sauce.TInfo2 > 0 && cli.Output.Lines == 1000 {
+				cli.Output.Lines = int(token.Sauce.TInfo2)
+			}
+			break
+		}
 	}
-
-	// if cli.Output.Oformat == "neotex" && cli.Output.Save == "" {
-	// 	fmt.Fprintf(os.Stderr, "Error: --oformat=neotex requires --save option to specify output file (.neot and .neos)\n")
-	// 	os.Exit(1)
-	// }
 
 	// Validate output encoding for neotex (must be utf8)
 	if cli.Output.Oformat == "neotex" && cli.Output.Oencoding != "utf8" {
@@ -210,15 +216,16 @@ func main() {
 		var ansiOutput string
 		var err error
 
-		// if cli.Input.Iformat == "ansi" {
-		// 	ansiOutput, err = exporter.ExportPassthroughANSI(tokens)
-		// } else {
-		// 	ansiOutput, err = exporter.ExportFlattenedANSI(cli.Output.Width, tokens, cli.Output.Oencoding, cli.Output.VGA)
-		// }
+		// Create SAUCE record if requested
+		var sauce *types.Sauce
+		if cli.Output.Sauce {
+			sauce = types.NewSauce(cli.Output.Width, cli.Output.Lines)
+		}
+
 		if cli.Output.Inline {
-			ansiOutput, _, err = exporter.ExportFlattenedANSIInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion)
+			ansiOutput, _, err = exporter.ExportFlattenedANSIInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion, sauce)
 		} else {
-			ansiOutput, _, err = exporter.ExportFlattenedANSI(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion)
+			ansiOutput, _, err = exporter.ExportFlattenedANSIWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion, sauce)
 		}
 
 		if err != nil {
@@ -226,14 +233,29 @@ func main() {
 			os.Exit(1)
 		}
 
-		// Convert to output encoding if needed
-		outputBytes, err := splitans.ConvertToEncoding([]byte(ansiOutput), cli.Output.Oencoding)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
-			os.Exit(1)
-		}
+		// Convert to output encoding if needed (but not SAUCE bytes which are binary)
+		if sauce != nil {
+			// When SAUCE is present, convert only the ANSI part, keep SAUCE binary
+			ansiLen := len(ansiOutput) - types.SauceTotalSize
+			ansiPart := ansiOutput[:ansiLen]
+			saucePart := ansiOutput[ansiLen:]
 
-		fmt.Print(string(outputBytes))
+			outputBytes, err := splitans.ConvertToEncoding([]byte(ansiPart), cli.Output.Oencoding)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Print(string(outputBytes) + saucePart)
+		} else {
+			outputBytes, err := splitans.ConvertToEncoding([]byte(ansiOutput), cli.Output.Oencoding)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
+				os.Exit(1)
+			}
+
+			fmt.Print(string(outputBytes))
+		}
 	// case "neotex":
 	// 	// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
 	// 	plainText, sequenceText, err := exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens)
@@ -250,17 +272,29 @@ func main() {
 		// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
 		var plainText, sequenceText string
 		var effectiveWidth int
+
+		// Always extract SAUCE from tokens for neotex output
+		var sauce *types.Sauce
+		for _, token := range tokens {
+			if token.Type == types.TokenSauce && token.Sauce != nil {
+				sauce = token.Sauce
+				break
+			}
+		}
+		// If -S flag is set and no SAUCE found, create one with dimensions
+		if cli.Output.Sauce && sauce == nil {
+			sauce = types.NewSauce(cli.Output.Width, cli.Output.Lines)
+		}
+
 		if cli.Output.Inline {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInline(cli.Output.Width, cli.Output.Lines, tokens, cropRegion)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
 		} else {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotex(cli.Output.Width, cli.Output.Lines, tokens, cropRegion)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neotex format: %v\n", err)
 			os.Exit(1)
 		}
-
-		// metadatas := neotex.ExtractMetadata(strings.Split(sequenceText, "\n"))
 
 		combined := ConcatenateTextAndSequence(plainText, sequenceText, effectiveWidth, " | ")
 		fmt.Println(combined)

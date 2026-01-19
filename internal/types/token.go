@@ -112,6 +112,7 @@ type Token struct {
 	C1Code        string    `json:"c1_code,omitempty"`
 	CSINotation   string    `json:"csi_notation,omitempty"`
 	Signification string    `json:"signification,omitempty"`
+	Sauce         *Sauce    `json:"sauce,omitempty"`
 }
 
 // C0 control codes names

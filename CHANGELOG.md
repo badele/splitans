@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/badele/splitans/compare/v0.2.0...v0.3.0) (2026-01-19)
+
+
+### Features
+
+* add SAUCE metadata support for import and export ([#14](https://github.com/badele/splitans/issues/14)) ([7ac6f38](https://github.com/badele/splitans/commit/7ac6f38a8556f7f0572ef40c9987f1fd384d15f8))
+
 ## [0.2.0](https://github.com/badele/splitans/compare/v0.1.0...v0.2.0) (2026-01-18)
 
 

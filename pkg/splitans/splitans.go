@@ -79,6 +79,9 @@ type (
 
 	// ContentBounds represents the bounding box of actual content in the buffer
 	ContentBounds = processor.ContentBounds
+
+	// Sauce represents a SAUCE metadata record for ANSI art files
+	Sauce = types.Sauce
 )
 
 // Token type constants
@@ -104,6 +107,38 @@ const (
 	ColorRGB      = types.ColorRGB
 )
 
+// SAUCE DataType constants
+const (
+	SauceDataTypeNone       = types.SauceDataTypeNone
+	SauceDataTypeCharacter  = types.SauceDataTypeCharacter
+	SauceDataTypeBitmap     = types.SauceDataTypeBitmap
+	SauceDataTypeVector     = types.SauceDataTypeVector
+	SauceDataTypeAudio      = types.SauceDataTypeAudio
+	SauceDataTypeBinaryText = types.SauceDataTypeBinaryText
+	SauceDataTypeXBin       = types.SauceDataTypeXBin
+	SauceDataTypeArchive    = types.SauceDataTypeArchive
+	SauceDataTypeExecutable = types.SauceDataTypeExecutable
+)
+
+// SAUCE FileType constants for DataType=Character
+const (
+	SauceFileTypeASCII      = types.SauceFileTypeASCII
+	SauceFileTypeANSi       = types.SauceFileTypeANSi
+	SauceFileTypeANSiMation = types.SauceFileTypeANSiMation
+	SauceFileTypeRIPScript  = types.SauceFileTypeRIPScript
+	SauceFileTypePCBoard    = types.SauceFileTypePCBoard
+	SauceFileTypeAvatar     = types.SauceFileTypeAvatar
+	SauceFileTypeHTML       = types.SauceFileTypeHTML
+	SauceFileTypeSource     = types.SauceFileTypeSource
+	SauceFileTypeTundraDraw = types.SauceFileTypeTundraDraw
+)
+
+// SAUCE record size constants
+const (
+	SauceRecordSize = types.SauceRecordSize
+	SauceTotalSize  = types.SauceTotalSize
+)
+
 // VGAPalette contains the 16 standard VGA colors
 var VGAPalette = types.VGAPalette
 
@@ -125,6 +160,24 @@ func stripUTF8BOM(data []byte) []byte {
 	return data
 }
 
+// extractSauceBytes extracts SAUCE record if present at end of file.
+// Returns (content, sauceBytes) where sauceBytes is nil if no SAUCE found.
+func extractSauceBytes(data []byte) ([]byte, []byte) {
+	if len(data) < types.SauceTotalSize {
+		return data, nil
+	}
+
+	sauceStart := len(data) - types.SauceTotalSize
+	potentialSauce := data[sauceStart:]
+
+	// Validate EOF marker (0x1A) + "SAUCE00" signature
+	if potentialSauce[0] != types.SauceEOF || string(potentialSauce[1:8]) != "SAUCE00" {
+		return data, nil
+	}
+
+	return data[:sauceStart], potentialSauce
+}
+
 // ============================================================================
 // EXPORTED
 // ============================================================================
@@ -132,9 +185,18 @@ func stripUTF8BOM(data []byte) []byte {
 // ConvertToUTF8 converts byte data from a source encoding to UTF-8.
 // Supported encodings: "utf8", "cp437", "cp850", "iso-8859-1"
 // The UTF-8 BOM (Byte Order Mark) is automatically stripped if present.
+// IMPORTANT: SAUCE records are preserved without encoding conversion (binary data).
+// Text fields in SAUCE are converted separately during parsing.
 func ConvertToUTF8(data []byte, sourceEncoding string) ([]byte, error) {
+	// Extract SAUCE record before conversion (keep raw bytes for binary fields)
+	content, sauceBytes := extractSauceBytes(data)
+
 	if sourceEncoding == "utf8" {
-		return stripUTF8BOM(data), nil
+		result := stripUTF8BOM(content)
+		if sauceBytes != nil {
+			result = append(result, sauceBytes...)
+		}
+		return result, nil
 	}
 
 	var decoder *encoding.Decoder
@@ -150,14 +212,22 @@ func ConvertToUTF8(data []byte, sourceEncoding string) ([]byte, error) {
 		return nil, fmt.Errorf("unsupported encoding: %s", sourceEncoding)
 	}
 
-	reader := transform.NewReader(bytes.NewReader(data), decoder)
+	// Convert only content, not SAUCE
+	reader := transform.NewReader(bytes.NewReader(content), decoder)
 	utf8Data, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, fmt.Errorf("encoding conversion error: %w", err)
 	}
 
 	// Strip BOM if present after conversion
-	return stripUTF8BOM(utf8Data), nil
+	result := stripUTF8BOM(utf8Data)
+
+	// Append raw SAUCE bytes (not converted - binary data preserved)
+	if sauceBytes != nil {
+		result = append(result, sauceBytes...)
+	}
+
+	return result, nil
 }
 
 // ConvertToEncoding converts UTF-8 data to the target encoding.
@@ -213,6 +283,14 @@ func NewANSITokenizer(input []byte) *ANSITokenizer {
 	return ansi.NewANSITokenizer(input)
 }
 
+// NewANSITokenizerWithEncoding creates a new tokenizer for ANSI format data with encoding info.
+// The encoding parameter specifies the source encoding for SAUCE text field conversion.
+// This is needed because SAUCE binary data is preserved without encoding conversion,
+// but text fields (Title, Author, Group, TInfoS) should be converted from source encoding.
+func NewANSITokenizerWithEncoding(input []byte, encoding string) *ANSITokenizer {
+	return ansi.NewANSITokenizerWithEncoding(input, encoding)
+}
+
 // NewNeotexTokenizer creates a new tokenizer for Neotex format data.
 // The width parameter specifies the expected line width.
 // Returns the parsed width (overrides when !TWxx/yy is present) and the tokenizer.
@@ -230,6 +308,18 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 // NewSGR creates a new SGR with default values.
 func NewSGR() *SGR {
 	return types.NewSGR()
+}
+
+// NewSauce creates a new SAUCE record with default values for ANSI files.
+// Width and height are stored in TInfo1 and TInfo2 respectively.
+func NewSauce(width, height int) *Sauce {
+	return types.NewSauce(width, height)
+}
+
+// ParseSauceFromBytes parses a 129-byte SAUCE record into a Sauce struct.
+// Returns an error if the data is invalid (wrong size, missing SAUCE00 signature).
+func ParseSauceFromBytes(data []byte) (*Sauce, error) {
+	return types.FromBytes(data)
 }
 
 // ParseCropRegion parses a crop string in format "x,y:x1,y1".
@@ -251,6 +341,21 @@ func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding stri
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion) (string, int, error) {
 	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, crop)
+}
+
+// ExportFlattenedANSIWithSauce exports tokens to a flattened ANSI string with SAUCE metadata appended.
+// If sauce is nil, behaves identically to ExportFlattenedANSI.
+// When sauce is provided, the actual content dimensions are calculated and stored in the SAUCE record.
+// Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+func ExportFlattenedANSIWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
+	return exporter.ExportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, crop, sauce)
+}
+
+// ExportFlattenedANSIInlineWithSauce exports tokens to a single-line ANSI string with SAUCE metadata appended.
+// If sauce is nil, behaves identically to ExportFlattenedANSIInline.
+// Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
+	return exporter.ExportFlattenedANSIInlineWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, crop, sauce)
 }
 
 // ExportFlattenedText exports tokens to plain text without ANSI codes.
@@ -283,6 +388,25 @@ func ExportFlattenedNeotex(width, nblines int, tokens []Token, crop *CropRegion)
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedNeotexInline(width, nblines int, tokens []Token, crop *CropRegion) (string, string, int, error) {
 	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens, crop)
+}
+
+// ExportFlattenedNeotexWithSauce exports tokens to Neotex format with SAUCE metadata on the last line.
+// Returns (text, sequences, effectiveWidth, error) where:
+//   - text is the plain text content (with extra line for SAUCE if present)
+//   - sequences is the neotex format sequences with positions (with SAUCE labels on last line)
+//   - effectiveWidth is the VT width after crop
+//
+// If sauce is nil, behaves identically to ExportFlattenedNeotex.
+func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce) (string, string, int, error) {
+	return exporter.ExportFlattenedNeotexWithSauce(width, nblines, tokens, crop, sauce)
+}
+
+// ExportFlattenedNeotexInlineWithSauce exports tokens to inline Neotex format with SAUCE metadata.
+// This flattens all lines into a single line and adjusts sequence positions.
+// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+// If sauce is nil, behaves identically to ExportFlattenedNeotexInline.
+func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce) (string, string, int, error) {
+	return exporter.ExportFlattenedNeotexInlineWithSauce(width, nblines, tokens, crop, sauce)
 }
 
 // SGRToNeotex converts an SGR struct to neotex format strings.

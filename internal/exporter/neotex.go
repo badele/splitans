@@ -225,6 +225,52 @@ func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop 
 	return exportFlattenedNeotex(width, nblines, tokens, true, crop)
 }
 
+// ExportFlattenedNeotexWithSauce exports tokens to neotex format with SAUCE metadata on the last line.
+// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+// If sauce is nil, behaves identically to ExportFlattenedNeotex.
+func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, crop *types.CropRegion, sauce *types.Sauce) (string, string, int, error) {
+	return exportFlattenedNeotexWithSauce(width, nblines, tokens, false, crop, sauce)
+}
+
+// ExportFlattenedNeotexInlineWithSauce exports tokens to inline neotex format with SAUCE metadata.
+// Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+// If sauce is nil, behaves identically to ExportFlattenedNeotexInline.
+func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []types.Token, crop *types.CropRegion, sauce *types.Sauce) (string, string, int, error) {
+	return exportFlattenedNeotexWithSauce(width, nblines, tokens, true, crop, sauce)
+}
+
+// sauceToNeotexLabels converts SAUCE metadata to neotex label format.
+// All SAUCE labels start with "!S" prefix, so no separate marker is needed.
+// Note: Width and Height are not exported here as they use !TW and !NL metadata.
+func sauceToNeotexLabels(sauce *types.Sauce) []string {
+	if sauce == nil {
+		return nil
+	}
+
+	var labels []string
+
+	if sauce.Title != "" {
+		labels = append(labels, fmt.Sprintf("!ST<%s>", sauce.Title))
+	}
+	if sauce.Author != "" {
+		labels = append(labels, fmt.Sprintf("!SA<%s>", sauce.Author))
+	}
+	if sauce.Group != "" {
+		labels = append(labels, fmt.Sprintf("!SG<%s>", sauce.Group))
+	}
+	if !sauce.Date.IsZero() {
+		labels = append(labels, fmt.Sprintf("!SD<%s>", sauce.Date.Format("20060102")))
+	}
+	if sauce.TInfoS != "" {
+		labels = append(labels, fmt.Sprintf("!SF<%s>", sauce.TInfoS))
+	}
+	if sauce.HasICEColors() {
+		labels = append(labels, "!SI")
+	}
+
+	return labels
+}
+
 // ============================================================================
 // PRIVATE
 // ============================================================================
@@ -407,6 +453,46 @@ func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool
 		text, sequences = ExportToInlineNeotex(vt)
 	} else {
 		text, sequences = ExportToNeotex(vt)
+	}
+
+	return text, sequences, effectiveWidth, nil
+}
+
+func exportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion, sauce *types.Sauce) (string, string, int, error) {
+	// If no SAUCE, delegate to the regular export function
+	if sauce == nil {
+		return exportFlattenedNeotex(width, nblines, tokens, inline, crop)
+	}
+
+	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false)
+
+	if err := vt.ApplyTokens(tokens); err != nil {
+		return "", "", 0, fmt.Errorf("error applying tokens: %w", err)
+	}
+
+	// Apply crop if specified
+	if crop != nil {
+		vt = vt.Crop(crop.X, crop.Y, crop.Width, crop.Height)
+		if vt == nil {
+			return "", "", 0, fmt.Errorf("invalid crop region")
+		}
+	}
+
+	effectiveWidth := vt.GetWidth()
+
+	var text, sequences string
+	if inline {
+		text, sequences = ExportToInlineNeotex(vt)
+	} else {
+		text, sequences = ExportToNeotex(vt)
+	}
+
+	// Append SAUCE line: empty text line + SAUCE labels
+	sauceLabels := sauceToNeotexLabels(sauce)
+	if len(sauceLabels) > 0 {
+		// Add a new line with empty text (spaces to match width) and SAUCE labels
+		text += "\n" + strings.Repeat(" ", effectiveWidth)
+		sequences += "\n" + strings.Join(sauceLabels, "; ")
 	}
 
 	return text, sequences, effectiveWidth, nil

@@ -188,14 +188,28 @@ type styleChange struct {
 	codes    []string
 }
 
+// styleChangeWithHyperlink represents a style change that may include hyperlink changes
+type styleChangeWithHyperlink struct {
+	position        int
+	codes           []string
+	hyperlink       *types.Hyperlink
+	hasHyperlinkOff bool
+}
+
 // convertLineToANSI converts a single line of text with its sequences to ANSI
 // Takes the current SGR state and returns the updated state after processing
 func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR) (string, *types.SGR) {
+	return convertLineToANSIWithHyperlink(textLine, seqLine, currentSGR, nil)
+}
+
+// convertLineToANSIWithHyperlink converts a single line of text with its sequences to ANSI
+// Takes the current SGR and Hyperlink state and returns the updated states after processing
+func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR *types.SGR, currentHyperlink *types.Hyperlink) (string, *types.SGR) {
 	if seqLine == "" {
 		return textLine, currentSGR
 	}
 
-	styles := parseLineSequences(seqLine)
+	styles := parseLineSequencesWithHyperlinks(seqLine)
 	if len(styles) == 0 {
 		return textLine, currentSGR
 	}
@@ -217,9 +231,20 @@ func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR) (
 			ApplyNeotexCode(code, newSGR)
 		}
 
-		// Generate differential ANSI sequence
+		// Generate differential ANSI sequence for SGR
 		ansiSeq := newSGR.DiffToANSI(currentSGR, false, true)
 		result.WriteString(ansiSeq)
+
+		// Handle hyperlink changes
+		if style.hasHyperlinkOff {
+			// Generate hyperlink OFF sequence
+			result.WriteString(hyperlinkToOSC8(nil))
+			currentHyperlink = nil
+		} else if style.hyperlink != nil {
+			// Generate hyperlink ON sequence
+			result.WriteString(hyperlinkToOSC8(style.hyperlink))
+			currentHyperlink = style.hyperlink
+		}
 
 		currentSGR = newSGR
 		textPos = style.position
@@ -231,6 +256,103 @@ func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR) (
 	}
 
 	return result.String(), currentSGR
+}
+
+// hyperlinkToOSC8 converts a Hyperlink to an OSC 8 escape sequence.
+// If hyperlink is nil, returns the "close hyperlink" sequence.
+func hyperlinkToOSC8(h *types.Hyperlink) string {
+	if h == nil || h.URL == "" {
+		// Close hyperlink: ESC ] 8 ; ; ESC \
+		return "\x1b]8;;\x1b\\"
+	}
+
+	// Build params string (key=value:key=value)
+	var params string
+	if len(h.Params) > 0 {
+		var paramParts []string
+		for k, v := range h.Params {
+			paramParts = append(paramParts, k+"="+v)
+		}
+		params = strings.Join(paramParts, ":")
+	}
+
+	// Open hyperlink: ESC ] 8 ; params ; URL ESC \
+	return "\x1b]8;" + params + ";" + h.URL + "\x1b\\"
+}
+
+// parseLineSequencesWithHyperlinks parses sequences for a single line, including hyperlinks.
+// Returns a slice of styleChangeWithHyperlink in the order they appear.
+// Metadata entries starting with '!' are ignored (e.g., !V1 for version)
+func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink {
+	var styles []styleChangeWithHyperlink
+	if seqLine == "" {
+		return styles
+	}
+
+	// Split by semicolons to get position entries
+	entries := strings.Split(seqLine, ";")
+
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+
+		// Skip metadata entries (start with '!')
+		if strings.HasPrefix(entry, "!") {
+			continue
+		}
+
+		// Split position from styles: "14:Fr, EU, HL:<url>"
+		parts := strings.SplitN(entry, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		position, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+		if err != nil {
+			continue
+		}
+		// Convert 1-indexed (editor format) to 0-indexed (internal)
+		position--
+
+		// Parse styles separated by commas
+		stylesStr := strings.TrimSpace(parts[1])
+		styleList := strings.Split(stylesStr, ",")
+
+		var codes []string
+		var hyperlink *types.Hyperlink
+		hasHyperlinkOff := false
+
+		for _, style := range styleList {
+			style = strings.TrimSpace(style)
+			if style == "" {
+				continue
+			}
+
+			// Check if it's a hyperlink code
+			if h, isHyperlink := ApplyNeotexHyperlinkCode(style); isHyperlink {
+				if h == nil {
+					hasHyperlinkOff = true
+				} else {
+					hyperlink = h
+				}
+			} else {
+				codes = append(codes, style)
+			}
+		}
+
+		if len(codes) > 0 || hyperlink != nil || hasHyperlinkOff {
+			styles = append(styles, styleChangeWithHyperlink{
+				position:        position,
+				codes:           codes,
+				hyperlink:       hyperlink,
+				hasHyperlinkOff: hasHyperlinkOff,
+			})
+		}
+	}
+
+	return styles
 }
 
 // parseLineSequences parses sequences for a single line

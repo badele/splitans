@@ -750,3 +750,114 @@ func TestTokenTypeUnmarshalJSON_Invalid(t *testing.T) {
 		t.Error("Expected error for invalid JSON")
 	}
 }
+
+func TestTokenizeOSC8Hyperlink(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectedURL string
+		isOff       bool
+		hasParams   bool
+		paramKey    string
+		paramValue  string
+	}{
+		{
+			name:        "Simple hyperlink with BEL terminator",
+			input:       "\x1b]8;;https://example.com\x07",
+			expectedURL: "https://example.com",
+			isOff:       false,
+		},
+		{
+			name:        "Simple hyperlink with ST terminator",
+			input:       "\x1b]8;;https://example.com\x1b\\",
+			expectedURL: "https://example.com",
+			isOff:       false,
+		},
+		{
+			name:        "Hyperlink OFF",
+			input:       "\x1b]8;;\x07",
+			expectedURL: "",
+			isOff:       true,
+		},
+		{
+			name:        "Hyperlink with id param",
+			input:       "\x1b]8;id=link1;https://example.com\x07",
+			expectedURL: "https://example.com",
+			isOff:       false,
+			hasParams:   true,
+			paramKey:    "id",
+			paramValue:  "link1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokenizer := NewANSITokenizer([]byte(tt.input))
+			tokens := tokenizer.Tokenize()
+
+			if len(tokens) != 1 {
+				t.Fatalf("Expected 1 token, got %d", len(tokens))
+			}
+
+			token := tokens[0]
+
+			if token.Type != types.TokenOSC {
+				t.Errorf("Expected TokenOSC, got %v", token.Type)
+			}
+
+			if token.Hyperlink == nil {
+				t.Fatal("Expected Hyperlink to be non-nil")
+			}
+
+			if token.Hyperlink.URL != tt.expectedURL {
+				t.Errorf("Expected URL %q, got %q", tt.expectedURL, token.Hyperlink.URL)
+			}
+
+			if tt.isOff && token.Hyperlink.URL != "" {
+				t.Errorf("Expected empty URL for hyperlink OFF, got %q", token.Hyperlink.URL)
+			}
+
+			if tt.hasParams {
+				if val, ok := token.Hyperlink.Params[tt.paramKey]; !ok || val != tt.paramValue {
+					t.Errorf("Expected param %s=%s, got %v", tt.paramKey, tt.paramValue, token.Hyperlink.Params)
+				}
+			}
+		})
+	}
+}
+
+func TestTokenizeMixedWithHyperlink(t *testing.T) {
+	input := "Click \x1b]8;;https://example.com\x07here\x1b]8;;\x07 to continue"
+	tokenizer := NewANSITokenizer([]byte(input))
+	tokens := tokenizer.Tokenize()
+
+	// Expected: TEXT("Click "), OSC8(ON), TEXT("here"), OSC8(OFF), TEXT(" to continue")
+	if len(tokens) != 5 {
+		t.Fatalf("Expected 5 tokens, got %d", len(tokens))
+	}
+
+	// Token 1: "Click "
+	if tokens[0].Type != types.TokenText || tokens[0].Value != "Click " {
+		t.Errorf("Token 1: expected text 'Click ', got %v", tokens[0])
+	}
+
+	// Token 2: OSC8 hyperlink ON
+	if tokens[1].Type != types.TokenOSC || tokens[1].Hyperlink == nil || tokens[1].Hyperlink.URL != "https://example.com" {
+		t.Errorf("Token 2: expected OSC8 hyperlink ON, got %v", tokens[1])
+	}
+
+	// Token 3: "here"
+	if tokens[2].Type != types.TokenText || tokens[2].Value != "here" {
+		t.Errorf("Token 3: expected text 'here', got %v", tokens[2])
+	}
+
+	// Token 4: OSC8 hyperlink OFF
+	if tokens[3].Type != types.TokenOSC || tokens[3].Hyperlink == nil || tokens[3].Hyperlink.URL != "" {
+		t.Errorf("Token 4: expected OSC8 hyperlink OFF, got %v", tokens[3])
+	}
+
+	// Token 5: " to continue"
+	if tokens[4].Type != types.TokenText || tokens[4].Value != " to continue" {
+		t.Errorf("Token 5: expected text ' to continue', got %v", tokens[4])
+	}
+}

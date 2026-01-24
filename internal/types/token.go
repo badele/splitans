@@ -103,16 +103,17 @@ func (t *TokenType) UnmarshalJSON(data []byte) error {
 /////////////////////////////////////////////////////////////////////////////
 
 type Token struct {
-	Type          TokenType `json:"type"`
-	Pos           int       `json:"pos"`
-	Raw           string    `json:"raw"`
-	Value         string    `json:"value,omitempty"`
-	Parameters    []string  `json:"parameters,omitempty"`
-	C0Code        byte      `json:"c0_code,omitempty"`
-	C1Code        string    `json:"c1_code,omitempty"`
-	CSINotation   string    `json:"csi_notation,omitempty"`
-	Signification string    `json:"signification,omitempty"`
-	Sauce         *Sauce    `json:"sauce,omitempty"`
+	Type          TokenType  `json:"type"`
+	Pos           int        `json:"pos"`
+	Raw           string     `json:"raw"`
+	Value         string     `json:"value,omitempty"`
+	Parameters    []string   `json:"parameters,omitempty"`
+	C0Code        byte       `json:"c0_code,omitempty"`
+	C1Code        string     `json:"c1_code,omitempty"`
+	CSINotation   string     `json:"csi_notation,omitempty"`
+	Signification string     `json:"signification,omitempty"`
+	Sauce         *Sauce     `json:"sauce,omitempty"`
+	Hyperlink     *Hyperlink `json:"hyperlink,omitempty"` // OSC 8 hyperlink
 }
 
 // C0 control codes names

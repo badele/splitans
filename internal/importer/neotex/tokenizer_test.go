@@ -464,3 +464,145 @@ func TestParseLineSequences(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyNeotexHyperlinkCode(t *testing.T) {
+	tests := []struct {
+		name          string
+		code          string
+		expectURL     string
+		expectOff     bool
+		expectMatched bool
+	}{
+		{
+			name:          "Hyperlink ON with URL",
+			code:          "HL:<https://example.com>",
+			expectURL:     "https://example.com",
+			expectOff:     false,
+			expectMatched: true,
+		},
+		{
+			name:          "Hyperlink ON with complex URL",
+			code:          "HL:<https://example.com/path?query=1&foo=bar>",
+			expectURL:     "https://example.com/path?query=1&foo=bar",
+			expectOff:     false,
+			expectMatched: true,
+		},
+		{
+			name:          "Hyperlink OFF",
+			code:          "Hl",
+			expectURL:     "",
+			expectOff:     true,
+			expectMatched: true,
+		},
+		{
+			name:          "Not a hyperlink code",
+			code:          "Fr",
+			expectURL:     "",
+			expectOff:     false,
+			expectMatched: false,
+		},
+		{
+			name:          "Not a hyperlink code - reset",
+			code:          "R0",
+			expectURL:     "",
+			expectOff:     false,
+			expectMatched: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hyperlink, matched := ApplyNeotexHyperlinkCode(tt.code)
+
+			if matched != tt.expectMatched {
+				t.Errorf("Expected matched=%v, got %v", tt.expectMatched, matched)
+			}
+
+			if tt.expectMatched {
+				if tt.expectOff {
+					if hyperlink != nil {
+						t.Errorf("Expected nil hyperlink for OFF, got %v", hyperlink)
+					}
+				} else {
+					if hyperlink == nil {
+						t.Fatal("Expected non-nil hyperlink")
+					}
+					if hyperlink.URL != tt.expectURL {
+						t.Errorf("Expected URL %q, got %q", tt.expectURL, hyperlink.URL)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestParseLineSequencesWithHyperlinks(t *testing.T) {
+	tests := []struct {
+		name                   string
+		seqLine                string
+		expectedCount          int
+		expectedHasHyperlink   bool
+		expectedHyperlinkOff   bool
+		expectedURL            string
+		expectedHyperlinkPos   int
+		expectedSGRCodeCount   int
+	}{
+		{
+			name:                   "Hyperlink ON only",
+			seqLine:                "9:HL:<https://example.com>",
+			expectedCount:          1,
+			expectedHasHyperlink:   true,
+			expectedURL:            "https://example.com",
+			expectedHyperlinkPos:   8,
+			expectedSGRCodeCount:   0,
+		},
+		{
+			name:                   "Hyperlink OFF only",
+			seqLine:                "12:Hl",
+			expectedCount:          1,
+			expectedHasHyperlink:   false,
+			expectedHyperlinkOff:   true,
+			expectedHyperlinkPos:   11,
+			expectedSGRCodeCount:   0,
+		},
+		{
+			name:                   "Mixed SGR and Hyperlink",
+			seqLine:                "9:Fr, HL:<https://example.com>; 12:Hl",
+			expectedCount:          2,
+			expectedHasHyperlink:   true,
+			expectedURL:            "https://example.com",
+			expectedHyperlinkPos:   8,
+			expectedSGRCodeCount:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseLineSequencesWithHyperlinks(tt.seqLine)
+
+			if len(result) != tt.expectedCount {
+				t.Fatalf("Expected %d style changes, got %d", tt.expectedCount, len(result))
+			}
+
+			if tt.expectedCount > 0 {
+				first := result[0]
+				if first.position != tt.expectedHyperlinkPos {
+					t.Errorf("Expected position %d, got %d", tt.expectedHyperlinkPos, first.position)
+				}
+				if tt.expectedHasHyperlink {
+					if first.hyperlink == nil {
+						t.Error("Expected hyperlink to be non-nil")
+					} else if first.hyperlink.URL != tt.expectedURL {
+						t.Errorf("Expected URL %q, got %q", tt.expectedURL, first.hyperlink.URL)
+					}
+				}
+				if tt.expectedHyperlinkOff && !first.hasHyperlinkOff {
+					t.Error("Expected hasHyperlinkOff to be true")
+				}
+				if len(first.codes) != tt.expectedSGRCodeCount {
+					t.Errorf("Expected %d SGR codes, got %d", tt.expectedSGRCodeCount, len(first.codes))
+				}
+			}
+		})
+	}
+}

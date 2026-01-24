@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/badele/splitans/compare/v0.3.0...v0.4.0) (2026-01-24)
+
+
+### Features
+
+* **hyperlink:** implement OSC 8 hyperlink handling with CP437 legacy mode ([#16](https://github.com/badele/splitans/issues/16)) ([1d867e1](https://github.com/badele/splitans/commit/1d867e152dcedbc4d01163e76a6dca27669e828f))
+
 ## [0.3.0](https://github.com/badele/splitans/compare/v0.2.0...v0.3.0) (2026-01-19)
 
 

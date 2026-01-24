@@ -13,19 +13,20 @@ import (
 ///////////////////////////////////////////////////////////////////////////////
 
 type VirtualTerminal struct {
-	buffer         [][]types.Cell
-	width          int
-	height         int
-	cursorX        int
-	cursorY        int
-	currentSGR     *types.SGR
-	savedCursorX   int
-	savedCursorY   int
-	outputEncoding string
-	useVGAColors   bool
-	debugCursor    bool
-	debugSGR       bool
-	lastWrapped    bool
+	buffer           [][]types.Cell
+	width            int
+	height           int
+	cursorX          int
+	cursorY          int
+	currentSGR       *types.SGR
+	currentHyperlink *types.Hyperlink // Current active hyperlink (OSC 8)
+	savedCursorX     int
+	savedCursorY     int
+	outputEncoding   string
+	useVGAColors     bool
+	debugCursor      bool
+	debugSGR         bool
+	lastWrapped      bool
 	// Ignore CR/LF tokens that immediately follow a soft wrap at width.
 	ignoreWrapCRLF bool
 }
@@ -130,6 +131,7 @@ func (vt *VirtualTerminal) ExportPlainTextInline() string {
 func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequences {
 	result := []types.LineWithSequences{}
 	var currentSGR *types.SGR = nil
+	var currentHyperlink *types.Hyperlink = nil
 
 	maxCursorY := 0
 	for y := 0; y < vt.height; y++ {
@@ -143,8 +145,9 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 		}
 
 		line := types.LineWithSequences{
-			Text:      "",
-			Sequences: []types.SGRSequence{},
+			Text:               "",
+			Sequences:          []types.SGRSequence{},
+			HyperlinkSequences: []types.HyperlinkSequence{},
 		}
 
 		var textBuilder strings.Builder
@@ -163,6 +166,19 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 				currentSGR = cell.SGR.Copy()
 
 				// fmt.Printf("  Detected SGR change at position %d: New SGR='%v'\n", x, cell.SGR)
+			}
+
+			// Detect Hyperlink change
+			if !cell.Hyperlink.Equals(currentHyperlink) {
+				var hyperlinkCopy *types.Hyperlink
+				if cell.Hyperlink != nil {
+					hyperlinkCopy = cell.Hyperlink.Copy()
+				}
+				line.HyperlinkSequences = append(line.HyperlinkSequences, types.HyperlinkSequence{
+					Position:  x,
+					Hyperlink: hyperlinkCopy,
+				})
+				currentHyperlink = hyperlinkCopy
 			}
 
 			// Add character to text (replace 0x0 with space)
@@ -351,6 +367,9 @@ func (vt *VirtualTerminal) applyToken(token types.Token) error {
 
 	case types.TokenCSI:
 		vt.handleCSI(token)
+
+	case types.TokenOSC:
+		vt.handleOSC(token)
 	}
 
 	return nil
@@ -367,9 +386,14 @@ func (vt *VirtualTerminal) writeText(text string) {
 		}
 
 		if vt.cursorY < vt.height {
+			var hyperlinkCopy *types.Hyperlink
+			if vt.currentHyperlink != nil {
+				hyperlinkCopy = vt.currentHyperlink.Copy()
+			}
 			vt.buffer[vt.cursorY][vt.cursorX] = types.Cell{
-				Char: r,
-				SGR:  vt.currentSGR.Copy(),
+				Char:      r,
+				SGR:       vt.currentSGR.Copy(),
+				Hyperlink: hyperlinkCopy,
 			}
 			vt.cursorX++
 
@@ -440,6 +464,19 @@ func (vt *VirtualTerminal) handleC0(code byte) {
 
 	// vt.computeMaxCursorPosition()
 
+}
+
+func (vt *VirtualTerminal) handleOSC(token types.Token) {
+	// Handle OSC 8 hyperlinks
+	if token.Hyperlink != nil {
+		if token.Hyperlink.URL == "" {
+			// Empty URL means hyperlink OFF
+			vt.currentHyperlink = nil
+		} else {
+			// Set new hyperlink
+			vt.currentHyperlink = token.Hyperlink.Copy()
+		}
+	}
 }
 
 func (vt *VirtualTerminal) handleSGR(params []string) {
@@ -685,12 +722,14 @@ func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
 
 	// Track the current SGR state across all lines for differential encoding
 	var currentSGR *types.SGR = nil
+	var currentHyperlink *types.Hyperlink = nil
 
 	for _, line := range lines {
 		var lineBuilder strings.Builder
 		textRunes := []rune(line.Text)
 
 		seqIndex := 0
+		hyperlinkSeqIndex := 0
 		for i, r := range textRunes {
 			// Check if there's a SGR change at this position
 			if seqIndex < len(line.Sequences) && line.Sequences[seqIndex].Position == i {
@@ -705,6 +744,26 @@ func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
 				// Update current state
 				currentSGR = newSGR.Copy()
 				seqIndex++
+			}
+
+			// Check if there's a hyperlink change at this position
+			// Skip hyperlink handling for CP437 encoding as OSC 8 was not supported in 1990s ANSI terminals
+			if vt.outputEncoding != "cp437" {
+				if hyperlinkSeqIndex < len(line.HyperlinkSequences) && line.HyperlinkSequences[hyperlinkSeqIndex].Position == i {
+					newHyperlink := line.HyperlinkSequences[hyperlinkSeqIndex].Hyperlink
+
+					// Generate OSC 8 sequence
+					osc8Seq := hyperlinkToOSC8(newHyperlink)
+					lineBuilder.WriteString(osc8Seq)
+
+					// Update current state
+					if newHyperlink != nil {
+						currentHyperlink = newHyperlink.Copy()
+					} else {
+						currentHyperlink = nil
+					}
+					hyperlinkSeqIndex++
+				}
 			}
 
 			lineBuilder.WriteRune(r)
@@ -722,12 +781,39 @@ func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
 		}
 	}
 
+	// Reset hyperlink at the end if still active (skip for CP437)
+	if vt.outputEncoding != "cp437" && currentHyperlink != nil {
+		builder.WriteString("\x1b]8;;\x1b\\")
+	}
+
 	// Reset at the end only if not already at default state
 	if !currentSGR.Equals(types.NewSGR()) {
 		builder.WriteString("\x1b[0m")
 	}
 
 	return builder.String()
+}
+
+// hyperlinkToOSC8 converts a Hyperlink to an OSC 8 escape sequence.
+// If hyperlink is nil, returns the "close hyperlink" sequence.
+func hyperlinkToOSC8(h *types.Hyperlink) string {
+	if h == nil || h.URL == "" {
+		// Close hyperlink: ESC ] 8 ; ; ESC \
+		return "\x1b]8;;\x1b\\"
+	}
+
+	// Build params string (key=value:key=value)
+	var params string
+	if len(h.Params) > 0 {
+		var paramParts []string
+		for k, v := range h.Params {
+			paramParts = append(paramParts, k+"="+v)
+		}
+		params = strings.Join(paramParts, ":")
+	}
+
+	// Open hyperlink: ESC ] 8 ; params ; URL ESC \
+	return "\x1b]8;" + params + ";" + h.URL + "\x1b\\"
 }
 
 func (vt *VirtualTerminal) exportPlainText(inline bool) string {

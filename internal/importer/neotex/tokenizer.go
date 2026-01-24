@@ -116,6 +116,22 @@ var neotexToSGRModifier = map[string]NeotexSGRModifier{
 	"Er": func(s *types.SGR) { s.Reverse = false },
 }
 
+// ApplyNeotexHyperlinkCode parses a neotex hyperlink code.
+// Returns the hyperlink (nil for OFF) and true if the code was a hyperlink code.
+// Format: "HL:<url>" for ON, "Hl" for OFF.
+func ApplyNeotexHyperlinkCode(code string) (*types.Hyperlink, bool) {
+	// Check for hyperlink ON: HL:<url>
+	if strings.HasPrefix(code, "HL:<") && strings.HasSuffix(code, ">") {
+		url := code[4 : len(code)-1] // Extract URL between < and >
+		return types.NewHyperlink(url), true
+	}
+	// Check for hyperlink OFF: Hl
+	if code == "Hl" {
+		return nil, true
+	}
+	return nil, false
+}
+
 // ApplyNeotexCode applique un code neotex à un SGR
 // Gère les codes standards, RGB (FRRGGBB/BRRGGBB) et indexed (Fxxx/Bxxx)
 func ApplyNeotexCode(code string, sgr *types.SGR) {

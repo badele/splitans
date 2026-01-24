@@ -356,14 +356,68 @@ func (t *Tokenizer) parseOSC(startBytePos int, startRunePos int) {
 		}
 	}
 
-	t.Tokens = append(t.Tokens, types.Token{
+	token := types.Token{
 		Type:       types.TokenOSC,
 		Pos:        startRunePos,
 		Raw:        string(t.input[startBytePos:t.pos]),
 		Value:      string(data),
 		Parameters: params,
-	})
+	}
+
+	// Check for OSC 8 hyperlink: ESC ] 8 ; params ; URL ST
+	// Format: "8;params;URL" or "8;;URL" (empty params)
+	if len(params) > 0 && params[0] == "8" {
+		hyperlink := parseOSC8Hyperlink(string(data))
+		if hyperlink != nil {
+			token.Hyperlink = hyperlink
+			token.Signification = "OSC 8 Hyperlink"
+			if hyperlink.URL != "" {
+				token.Signification += ": " + hyperlink.URL
+			} else {
+				token.Signification += " OFF"
+			}
+		}
+	}
+
+	t.Tokens = append(t.Tokens, token)
 	t.runePos += (t.pos - startBytePos)
+}
+
+// parseOSC8Hyperlink parses an OSC 8 hyperlink from the data string.
+// Format: "8;params;URL" where params is optional key=value:key=value pairs.
+// Returns nil if not a valid OSC 8 sequence.
+func parseOSC8Hyperlink(data string) *types.Hyperlink {
+	// Must start with "8;"
+	if !strings.HasPrefix(data, "8;") {
+		return nil
+	}
+
+	rest := data[2:] // Skip "8;"
+
+	// Find the second semicolon that separates params from URL
+	semicolonIdx := strings.Index(rest, ";")
+	if semicolonIdx == -1 {
+		// No second semicolon means invalid format
+		return nil
+	}
+
+	paramsStr := rest[:semicolonIdx]
+	url := rest[semicolonIdx+1:]
+
+	// Create hyperlink
+	hyperlink := types.NewHyperlink(url)
+
+	// Parse params (format: key=value:key=value)
+	if paramsStr != "" {
+		paramPairs := strings.Split(paramsStr, ":")
+		for _, pair := range paramPairs {
+			if kv := strings.SplitN(pair, "=", 2); len(kv) == 2 {
+				hyperlink.Params[kv[0]] = kv[1]
+			}
+		}
+	}
+
+	return hyperlink
 }
 
 func (t *Tokenizer) parseOtherEscape(startBytePos int, startRunePos int) {

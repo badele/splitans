@@ -71,10 +71,17 @@ type SGRSequence struct {
 	SGR      *SGR // The SGR sequence to apply from this position
 }
 
+// HyperlinkSequence represents a hyperlink state change at a specific position
+type HyperlinkSequence struct {
+	Position  int        // Position of the character in the line (0-indexed)
+	Hyperlink *Hyperlink // The hyperlink to apply (nil = hyperlink OFF)
+}
+
 // LineWithSequences contains a line of text and all SGR changes within that line
 type LineWithSequences struct {
-	Text      string
-	Sequences []SGRSequence
+	Text               string
+	Sequences          []SGRSequence
+	HyperlinkSequences []HyperlinkSequence
 }
 
 // ============================================================================

@@ -95,6 +95,14 @@ func SGRToNeotex(sgr *types.SGR) []string {
 		codes = append(codes, "ER")
 	}
 
+	// Hover link colors
+	if !sgr.LinkFgColor.IsDefault() {
+		codes = append(codes, linkHoverFgToNeotex(sgr)...)
+	}
+	if !sgr.LinkBgColor.IsDefault() {
+		codes = append(codes, linkHoverBgToNeotex(sgr)...)
+	}
+
 	return codes
 }
 
@@ -159,13 +167,41 @@ func DiffSGRToNeotex(current, previous *types.SGR) []string {
 	// If reset needed, return R0 + full current state
 	if needsReset {
 		codes := []string{"R0"}
-		// Add back all active attributes from current state
-		fullCodes := SGRToNeotex(current)
-		for _, c := range fullCodes {
-			if c != "R0" {
-				codes = append(codes, c)
-			}
+
+		// Rebuild state without hover codes (to avoid re-émission si inchangés)
+		// Foreground
+		if !current.FgColor.IsDefault() {
+			codes = append(codes, fgColorToNeotex(current)...)
 		}
+		// Background
+		if !current.BgColor.IsDefault() {
+			codes = append(codes, bgColorToNeotex(current)...)
+		}
+		// Effects
+		if current.Dim {
+			codes = append(codes, "EM")
+		}
+		if current.Italic {
+			codes = append(codes, "EI")
+		}
+		if current.Underline {
+			codes = append(codes, "EU")
+		}
+		if current.Blink {
+			codes = append(codes, "EB")
+		}
+		if current.Reverse {
+			codes = append(codes, "ER")
+		}
+
+		// Hover colors seulement si elles ont changé
+		if current.LinkFgColor != previous.LinkFgColor {
+			codes = append(codes, linkHoverFgToNeotex(current)...)
+		}
+		if current.LinkBgColor != previous.LinkBgColor {
+			codes = append(codes, linkHoverBgToNeotex(current)...)
+		}
+
 		return codes
 	}
 
@@ -203,6 +239,14 @@ func DiffSGRToNeotex(current, previous *types.SGR) []string {
 	// Handle background color
 	if current.BgColor != previous.BgColor {
 		codes = append(codes, bgColorToNeotex(current)...)
+	}
+
+	// Handle link hover colors (HF/HB) - not reset by R0
+	if current.LinkFgColor != previous.LinkFgColor {
+		codes = append(codes, linkHoverFgToNeotex(current)...)
+	}
+	if current.LinkBgColor != previous.LinkBgColor {
+		codes = append(codes, linkHoverBgToNeotex(current)...)
 	}
 
 	return codes
@@ -322,6 +366,38 @@ func bgColorToNeotex(sgr *types.SGR) []string {
 		return []string{fmt.Sprintf("B%d", sgr.BgColor.Index)}
 	}
 
+	return nil
+}
+
+// linkHoverFgToNeotex generates neotex code for link hover foreground color
+func linkHoverFgToNeotex(sgr *types.SGR) []string {
+	switch sgr.LinkFgColor.Type {
+	case types.ColorStandard:
+		colorIndex := sgr.LinkFgColor.Index
+		if int(colorIndex) < len(neotexFgColors) {
+			return []string{"HF" + neotexFgColors[colorIndex][1:]}
+		}
+	case types.ColorRGB:
+		return []string{fmt.Sprintf("HF%02X%02X%02X", sgr.LinkFgColor.R, sgr.LinkFgColor.G, sgr.LinkFgColor.B)}
+	case types.ColorIndexed:
+		return []string{fmt.Sprintf("HF%d", sgr.LinkFgColor.Index)}
+	}
+	return nil
+}
+
+// linkHoverBgToNeotex generates neotex code for link hover background color
+func linkHoverBgToNeotex(sgr *types.SGR) []string {
+	switch sgr.LinkBgColor.Type {
+	case types.ColorStandard:
+		colorIndex := sgr.LinkBgColor.Index
+		if int(colorIndex) < len(neotexBgColors) {
+			return []string{"HB" + neotexBgColors[colorIndex][1:]}
+		}
+	case types.ColorRGB:
+		return []string{fmt.Sprintf("HB%02X%02X%02X", sgr.LinkBgColor.R, sgr.LinkBgColor.G, sgr.LinkBgColor.B)}
+	case types.ColorIndexed:
+		return []string{fmt.Sprintf("HB%d", sgr.LinkBgColor.Index)}
+	}
 	return nil
 }
 

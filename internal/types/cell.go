@@ -3,8 +3,10 @@ package types
 // Hyperlink represents an OSC 8 hyperlink with URL and optional parameters.
 // OSC 8 format: ESC ] 8 ; params ; URL ST text ESC ] 8 ; ; ST
 type Hyperlink struct {
-	URL    string            // The target URL
-	Params map[string]string // Optional parameters (e.g., id=xyz)
+	URL     string            // The target URL
+	Params  map[string]string // Optional parameters (e.g., id=xyz)
+	HoverFg *ColorValue       // Optional hover foreground color
+	HoverBg *ColorValue       // Optional hover background color
 }
 
 // NewHyperlink creates a new Hyperlink with the given URL.
@@ -24,9 +26,21 @@ func (h *Hyperlink) Copy() *Hyperlink {
 	for k, v := range h.Params {
 		params[k] = v
 	}
+	var fgCopy *ColorValue
+	var bgCopy *ColorValue
+	if h.HoverFg != nil {
+		fg := *h.HoverFg
+		fgCopy = &fg
+	}
+	if h.HoverBg != nil {
+		bg := *h.HoverBg
+		bgCopy = &bg
+	}
 	return &Hyperlink{
-		URL:    h.URL,
-		Params: params,
+		URL:     h.URL,
+		Params:  params,
+		HoverFg: fgCopy,
+		HoverBg: bgCopy,
 	}
 }
 
@@ -48,6 +62,18 @@ func (h *Hyperlink) Equals(other *Hyperlink) bool {
 		if other.Params[k] != v {
 			return false
 		}
+	}
+	if (h.HoverFg == nil) != (other.HoverFg == nil) {
+		return false
+	}
+	if h.HoverFg != nil && *h.HoverFg != *other.HoverFg {
+		return false
+	}
+	if (h.HoverBg == nil) != (other.HoverBg == nil) {
+		return false
+	}
+	if h.HoverBg != nil && *h.HoverBg != *other.HoverBg {
+		return false
 	}
 	return true
 }

@@ -194,6 +194,8 @@ type styleChangeWithHyperlink struct {
 	codes           []string
 	hyperlink       *types.Hyperlink
 	hasHyperlinkOff bool
+	hoverFg         *types.ColorValue
+	hoverBg         *types.ColorValue
 }
 
 // convertLineToANSI converts a single line of text with its sequences to ANSI
@@ -242,6 +244,14 @@ func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR 
 			currentHyperlink = nil
 		} else if style.hyperlink != nil {
 			// Generate hyperlink ON sequence
+			if style.hoverFg != nil {
+				fgCopy := *style.hoverFg
+				style.hyperlink.HoverFg = &fgCopy
+			}
+			if style.hoverBg != nil {
+				bgCopy := *style.hoverBg
+				style.hyperlink.HoverBg = &bgCopy
+			}
 			result.WriteString(hyperlinkToOSC8(style.hyperlink))
 			currentHyperlink = style.hyperlink
 		}
@@ -289,6 +299,60 @@ func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink
 		return styles
 	}
 
+	parseHoverColorValue := func(code string) *types.ColorValue {
+		if len(code) == 0 {
+			return nil
+		}
+		// RGB (6 hex)
+		if len(code) == 6 {
+			if r, g, b, err := parseRGBHex(code); err == nil {
+				return &types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
+			}
+		}
+		// Indexed
+		if idx, err := strconv.Atoi(code); err == nil && idx >= 0 && idx <= 255 {
+			return &types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
+		}
+		// Standard single-letter (k r g y b m c w K R G Y B M C W)
+		if len(code) == 1 {
+			switch code {
+			case "k":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 0}
+			case "r":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 1}
+			case "g":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 2}
+			case "y":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 3}
+			case "b":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 4}
+			case "m":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 5}
+			case "c":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 6}
+			case "w":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 7}
+			case "K":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 8}
+			case "R":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 9}
+			case "G":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 10}
+			case "Y":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 11}
+			case "B":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 12}
+			case "M":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 13}
+			case "C":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 14}
+			case "W":
+				return &types.ColorValue{Type: types.ColorStandard, Index: 15}
+			}
+		}
+		return nil
+	}
+
 	// Split by semicolons to get position entries
 	entries := strings.Split(seqLine, ";")
 
@@ -323,6 +387,8 @@ func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink
 		var codes []string
 		var hyperlink *types.Hyperlink
 		hasHyperlinkOff := false
+		var hoverFg *types.ColorValue
+		var hoverBg *types.ColorValue
 
 		for _, style := range styleList {
 			style = strings.TrimSpace(style)
@@ -337,17 +403,36 @@ func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink
 				} else {
 					hyperlink = h
 				}
-			} else {
-				codes = append(codes, style)
+				continue
 			}
+
+			// Hover colors HF/HB (reuse ApplyNeotexCode parsing rules)
+			if strings.HasPrefix(style, "HF") || strings.HasPrefix(style, "HB") {
+				if strings.HasPrefix(style, "HF") {
+					if c := parseHoverColorValue(style[2:]); c != nil {
+						hoverFg = c
+						continue
+					}
+				}
+				if strings.HasPrefix(style, "HB") {
+					if c := parseHoverColorValue(style[2:]); c != nil {
+						hoverBg = c
+						continue
+					}
+				}
+			}
+
+			codes = append(codes, style)
 		}
 
-		if len(codes) > 0 || hyperlink != nil || hasHyperlinkOff {
+		if len(codes) > 0 || hyperlink != nil || hasHyperlinkOff || hoverFg != nil || hoverBg != nil {
 			styles = append(styles, styleChangeWithHyperlink{
 				position:        position,
 				codes:           codes,
 				hyperlink:       hyperlink,
 				hasHyperlinkOff: hasHyperlinkOff,
+				hoverFg:         hoverFg,
+				hoverBg:         hoverBg,
 			})
 		}
 	}

@@ -43,6 +43,7 @@ package neotex
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -55,6 +56,62 @@ type Tokenizer struct {
 	seqLines  []string         // Lignes de séquences (sans \n)
 	Tokens    []types.Token    `json:"tokens"`
 	Stats     types.TokenStats `json:"stats"`
+	pos       int
+}
+
+// parseHoverColorValue parse code (without HF/HB prefix) into ColorValue.
+func parseHoverColorValue(code string) *types.ColorValue {
+	if len(code) == 0 {
+		return nil
+	}
+	// RGB hex 6 chars
+	if len(code) == 6 {
+		if r, g, b, err := parseRGBHex(code); err == nil {
+			return &types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
+		}
+	}
+	// Indexed
+	if idx, err := strconv.Atoi(code); err == nil && idx >= 0 && idx <= 255 {
+		return &types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
+	}
+	// Standard single letter
+	if len(code) == 1 {
+		switch code {
+		case "k":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 0}
+		case "r":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 1}
+		case "g":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 2}
+		case "y":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 3}
+		case "b":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 4}
+		case "m":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 5}
+		case "c":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 6}
+		case "w":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 7}
+		case "K":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 8}
+		case "R":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 9}
+		case "G":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 10}
+		case "Y":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 11}
+		case "B":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 12}
+		case "M":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 13}
+		case "C":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 14}
+		case "W":
+			return &types.ColorValue{Type: types.ColorStandard, Index: 15}
+		}
+	}
+	return nil
 }
 
 // NeotexSGRModifier est une fonction qui modifie un SGR
@@ -114,6 +171,42 @@ var neotexToSGRModifier = map[string]NeotexSGRModifier{
 	"Eb": func(s *types.SGR) { s.Blink = false },
 	"ER": func(s *types.SGR) { s.Reverse = true },
 	"Er": func(s *types.SGR) { s.Reverse = false },
+
+	// Hover FG (standard)
+	"HFk": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 0} },
+	"HFr": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 1} },
+	"HFg": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 2} },
+	"HFy": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 3} },
+	"HFb": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 4} },
+	"HFm": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 5} },
+	"HFc": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 6} },
+	"HFw": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 7} },
+	"HFK": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 8} },
+	"HFR": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 9} },
+	"HFG": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 10} },
+	"HFY": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 11} },
+	"HFB": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 12} },
+	"HFM": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 13} },
+	"HFC": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 14} },
+	"HFW": func(s *types.SGR) { s.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: 15} },
+
+	// Hover BG (standard)
+	"HBk": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 0} },
+	"HBr": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 1} },
+	"HBg": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 2} },
+	"HBy": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 3} },
+	"HBb": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 4} },
+	"HBm": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 5} },
+	"HBc": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 6} },
+	"HBw": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 7} },
+	"HBK": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 8} },
+	"HBR": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 9} },
+	"HBG": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 10} },
+	"HBY": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 11} },
+	"HBB": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 12} },
+	"HBM": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 13} },
+	"HBC": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 14} },
+	"HBW": func(s *types.SGR) { s.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: 15} },
 }
 
 // ApplyNeotexHyperlinkCode parses a neotex hyperlink code.
@@ -142,26 +235,36 @@ func ApplyNeotexCode(code string, sgr *types.SGR) {
 	}
 
 	// Gérer RGB: FRRGGBB ou BRRGGBB (7 chars)
-	if len(code) == 7 && (code[0] == 'F' || code[0] == 'B') {
+	if len(code) == 7 && (code[0] == 'F' || code[0] == 'B' || code[:2] == "HF" || code[:2] == "HB") {
 		if r, g, b, err := parseRGBHex(code[1:]); err == nil {
 			color := types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
-			if code[0] == 'F' {
+			switch {
+			case code[0] == 'F':
 				sgr.FgColor = color
-			} else {
+			case code[0] == 'B':
 				sgr.BgColor = color
+			case code[:2] == "HF":
+				sgr.LinkFgColor = color
+			case code[:2] == "HB":
+				sgr.LinkBgColor = color
 			}
 			return
 		}
 	}
 
-	// Gérer Indexed: Fxxx ou Bxxx (2-4 chars)
-	if len(code) >= 2 && len(code) <= 4 && (code[0] == 'F' || code[0] == 'B') {
+	// Gérer Indexed: Fxxx ou Bxxx ou HFxxx/HBxxx (2-4 chars)
+	if len(code) >= 2 && len(code) <= 4 && (code[0] == 'F' || code[0] == 'B' || code[:2] == "HF" || code[:2] == "HB") {
 		if index, err := strconv.Atoi(code[1:]); err == nil && index >= 0 && index <= 255 {
 			color := types.ColorValue{Type: types.ColorIndexed, Index: uint8(index)}
-			if code[0] == 'F' {
+			switch {
+			case code[0] == 'F':
 				sgr.FgColor = color
-			} else {
+			case code[0] == 'B':
 				sgr.BgColor = color
+			case code[:2] == "HF":
+				sgr.LinkFgColor = color
+			case code[:2] == "HB":
+				sgr.LinkBgColor = color
 			}
 		}
 	}
@@ -265,13 +368,19 @@ func (t *Tokenizer) Tokenize() []types.Token {
 	// Extract metadata including SAUCE from sequence lines
 	meta := ExtractMetadata(t.seqLines)
 
-	// Convert neotex format to ANSI format
+	// Convert neotex format to ANSI format (for base tokens)
 	ansiData := ConvertNeotexToANSI(t.textLines, t.seqLines)
 
 	// Use the existing ANSI tokenizer
 	ansiTokenizer := ansi.NewANSITokenizer(ansiData)
-	t.Tokens = ansiTokenizer.Tokenize()
+	ansiTokens := ansiTokenizer.Tokenize()
 	t.Stats = ansiTokenizer.GetStats()
+
+	// Start with ANSI tokens
+	t.Tokens = append([]types.Token{}, ansiTokens...)
+
+	// Append hover tokens parsed directly from neotex sequences
+	t.appendHoverTokens()
 
 	// If SAUCE metadata was found, add a TokenSauce token
 	if meta.Sauce != nil {
@@ -284,10 +393,116 @@ func (t *Tokenizer) Tokenize() []types.Token {
 		t.Tokens = append(t.Tokens, sauceToken)
 	}
 
+	// Recompute stats including hover and sauce tokens
+	t.calculateStats()
+
 	return t.Tokens
 }
 
 // GetStats returns tokenization statistics
 func (t *Tokenizer) GetStats() types.TokenStats {
 	return t.Stats
+}
+
+// calculateStats recomputes token statistics for the current token list.
+func (t *Tokenizer) calculateStats() {
+	// reset
+	t.Stats.TotalTokens = len(t.Tokens)
+	t.Stats.TokensByType = make(map[types.TokenType]int)
+	t.Stats.SGRCodes = make(map[string]int)
+	t.Stats.CSISequences = make(map[string]int)
+	t.Stats.C0Codes = make(map[byte]int)
+	t.Stats.C1Codes = make(map[string]int)
+	t.Stats.TotalTextLength = 0
+
+	for _, token := range t.Tokens {
+		t.Stats.TokensByType[token.Type]++
+
+		switch token.Type {
+		case types.TokenText:
+			t.Stats.TotalTextLength += len(token.Value)
+		case types.TokenSGR:
+			for _, param := range token.Parameters {
+				t.Stats.SGRCodes[param]++
+			}
+		case types.TokenCSI:
+			if token.CSINotation != "" {
+				t.Stats.CSISequences[token.CSINotation]++
+			}
+		case types.TokenC0:
+			t.Stats.C0Codes[token.C0Code]++
+		case types.TokenC1:
+			t.Stats.C1Codes[token.C1Code]++
+		}
+	}
+}
+
+// appendHoverTokens parses HF/HB codes from seqLines and appends TokenHoverFg/TokenHoverBg tokens.
+// Positions are derived from line offsets so that ordering matches the original text stream.
+func (t *Tokenizer) appendHoverTokens() {
+	hoverTokens := make([]types.Token, 0)
+	offset := 0
+
+	for lineIdx, line := range t.seqLines {
+		if line == "" {
+			offset += len([]rune(t.textLines[lineIdx]))
+			continue
+		}
+		entries := strings.Split(line, ";")
+		for _, entry := range entries {
+			entry = strings.TrimSpace(entry)
+			if entry == "" || strings.HasPrefix(entry, "!") {
+				continue
+			}
+			parts := strings.SplitN(entry, ":", 2)
+			if len(parts) != 2 {
+				continue
+			}
+			stylesStr := strings.TrimSpace(parts[1])
+			styleList := strings.Split(stylesStr, ",")
+			for _, style := range styleList {
+				style = strings.TrimSpace(style)
+				if style == "" {
+					continue
+				}
+				if strings.HasPrefix(style, "HF") {
+					if color := parseHoverColorValue(style[2:]); color != nil {
+						switch color.Type {
+						case types.ColorStandard:
+							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"std", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
+						case types.ColorIndexed:
+							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"idx", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
+						case types.ColorRGB:
+							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
+						}
+					}
+					continue
+				}
+				if strings.HasPrefix(style, "HB") {
+					if color := parseHoverColorValue(style[2:]); color != nil {
+						switch color.Type {
+						case types.ColorStandard:
+							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"std", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
+						case types.ColorIndexed:
+							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"idx", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
+						case types.ColorRGB:
+							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
+						}
+					}
+					continue
+				}
+			}
+		}
+		offset += len([]rune(t.textLines[lineIdx]))
+	}
+
+	if len(hoverTokens) == 0 {
+		return
+	}
+
+	// Fusionner et trier par position pour conserver l'ordre du flux
+	t.Tokens = append(t.Tokens, hoverTokens...)
+	sort.SliceStable(t.Tokens, func(i, j int) bool {
+		return t.Tokens[i].Pos < t.Tokens[j].Pos
+	})
 }

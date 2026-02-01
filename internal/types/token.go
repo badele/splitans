@@ -22,6 +22,8 @@ const (
 	TokenCSI
 	TokenCSIInterupted
 	TokenSGR
+	TokenHoverFg
+	TokenHoverBg
 	TokenDCS
 	TokenOSC
 	TokenEscape
@@ -43,6 +45,10 @@ func (t TokenType) String() string {
 		return "TokenCSIInterupted"
 	case TokenSGR:
 		return "TokenSGR"
+	case TokenHoverFg:
+		return "TokenHoverFg"
+	case TokenHoverBg:
+		return "TokenHoverBg"
 	case TokenDCS:
 		return "TokenDCS"
 	case TokenOSC:
@@ -81,6 +87,10 @@ func (t *TokenType) UnmarshalJSON(data []byte) error {
 		*t = TokenCSIInterupted
 	case "TokenSGR":
 		*t = TokenSGR
+	case "TokenHoverFg":
+		*t = TokenHoverFg
+	case "TokenHoverBg":
+		*t = TokenHoverBg
 	case "TokenDCS":
 		*t = TokenDCS
 	case "TokenOSC":

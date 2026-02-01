@@ -538,41 +538,41 @@ func TestApplyNeotexHyperlinkCode(t *testing.T) {
 
 func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 	tests := []struct {
-		name                   string
-		seqLine                string
-		expectedCount          int
-		expectedHasHyperlink   bool
-		expectedHyperlinkOff   bool
-		expectedURL            string
-		expectedHyperlinkPos   int
-		expectedSGRCodeCount   int
+		name                 string
+		seqLine              string
+		expectedCount        int
+		expectedHasHyperlink bool
+		expectedHyperlinkOff bool
+		expectedURL          string
+		expectedHyperlinkPos int
+		expectedSGRCodeCount int
 	}{
 		{
-			name:                   "Hyperlink ON only",
-			seqLine:                "9:HL:<https://example.com>",
-			expectedCount:          1,
-			expectedHasHyperlink:   true,
-			expectedURL:            "https://example.com",
-			expectedHyperlinkPos:   8,
-			expectedSGRCodeCount:   0,
+			name:                 "Hyperlink ON only",
+			seqLine:              "9:HL:<https://example.com>",
+			expectedCount:        1,
+			expectedHasHyperlink: true,
+			expectedURL:          "https://example.com",
+			expectedHyperlinkPos: 8,
+			expectedSGRCodeCount: 0,
 		},
 		{
-			name:                   "Hyperlink OFF only",
-			seqLine:                "12:Hl",
-			expectedCount:          1,
-			expectedHasHyperlink:   false,
-			expectedHyperlinkOff:   true,
-			expectedHyperlinkPos:   11,
-			expectedSGRCodeCount:   0,
+			name:                 "Hyperlink OFF only",
+			seqLine:              "12:Hl",
+			expectedCount:        1,
+			expectedHasHyperlink: false,
+			expectedHyperlinkOff: true,
+			expectedHyperlinkPos: 11,
+			expectedSGRCodeCount: 0,
 		},
 		{
-			name:                   "Mixed SGR and Hyperlink",
-			seqLine:                "9:Fr, HL:<https://example.com>; 12:Hl",
-			expectedCount:          2,
-			expectedHasHyperlink:   true,
-			expectedURL:            "https://example.com",
-			expectedHyperlinkPos:   8,
-			expectedSGRCodeCount:   1,
+			name:                 "Mixed SGR and Hyperlink",
+			seqLine:              "9:Fr, HL:<https://example.com>; 12:Hl",
+			expectedCount:        2,
+			expectedHasHyperlink: true,
+			expectedURL:          "https://example.com",
+			expectedHyperlinkPos: 8,
+			expectedSGRCodeCount: 1,
 		},
 	}
 

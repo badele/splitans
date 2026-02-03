@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/alecthomas/kong"
 
 	"github.com/badele/splitans/internal/exporter"
+	exporterhtml "github.com/badele/splitans/internal/exporter/html"
 	"github.com/badele/splitans/internal/types"
 	"github.com/badele/splitans/pkg/splitans"
 )
@@ -26,7 +28,7 @@ type CLI struct {
 	} `embed:"" prefix:"" group:"Input options:"`
 
 	Output struct {
-		Oformat   string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats" help:"Output format: ansi, json, neotex, plaintext, table, stats"`
+		Oformat   string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats,html,html-pack" help:"Output format: ansi, json, neotex, plaintext, table, stats, html, html-pack"`
 		Oencoding string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
 		Width     int    `short:"W" default:"80" help:"Width text to specified width"`
 		Lines     int    `short:"L" default:"1000" help:"Nb lines text"`
@@ -342,6 +344,97 @@ func main() {
 		}
 
 		fmt.Println(string(outputBytes))
+
+	case "html":
+		var plainText, sequenceText string
+		var effectiveWidth int
+
+		var sauce *types.Sauce
+		for _, token := range tokens {
+			if token.Type == types.TokenSauce && token.Sauce != nil {
+				sauce = token.Sauce
+				break
+			}
+		}
+		if cli.Output.Sauce && sauce == nil {
+			sauce = types.NewSauce(cli.Output.Width, cli.Output.Lines)
+		}
+
+		if cli.Output.Inline {
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+		} else {
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating neotex format for HTML: %v\n", err)
+			os.Exit(1)
+		}
+
+		neotexContent := ConcatenateTextAndSequence(plainText, sequenceText, effectiveWidth, " | ")
+		htmlOutput, err := exporterhtml.ExportHTML(neotexContent)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating HTML export: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Print(htmlOutput)
+
+	case "html-pack":
+		var plainText, sequenceText string
+		var effectiveWidth int
+
+		var sauce *types.Sauce
+		for _, token := range tokens {
+			if token.Type == types.TokenSauce && token.Sauce != nil {
+				sauce = token.Sauce
+				break
+			}
+		}
+		if cli.Output.Sauce && sauce == nil {
+			sauce = types.NewSauce(cli.Output.Width, cli.Output.Lines)
+		}
+
+		if cli.Output.Inline {
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+		} else {
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating neotex format for HTML pack: %v\n", err)
+			os.Exit(1)
+		}
+
+		neotexContent := ConcatenateTextAndSequence(plainText, sequenceText, effectiveWidth, " | ")
+		pack, err := exporterhtml.ExportHTMLPack(neotexContent)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error generating HTML pack: %v\n", err)
+			os.Exit(1)
+		}
+
+		outputDir := "exported-html"
+		if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating output directory %s: %v\n", outputDir, err)
+			os.Exit(1)
+		}
+
+		if err := os.WriteFile(filepath.Join(outputDir, "index.html"), []byte(pack.HTML), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing index.html: %v\n", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(outputDir, "style.css"), []byte(pack.CSS), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing style.css: %v\n", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(outputDir, "app.js"), []byte(pack.JS), 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing app.js: %v\n", err)
+			os.Exit(1)
+		}
+		if err := os.WriteFile(filepath.Join(outputDir, pack.FontName), pack.FontData, 0o644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", pack.FontName, err)
+			os.Exit(1)
+		}
+
+		fmt.Fprintf(os.Stderr, "Generated %s/index.html, style.css, app.js, %s\n", outputDir, pack.FontName)
 	default:
 		fmt.Fprintf(os.Stderr, "Error: unsupported output format: %s\n", cli.Output.Oformat)
 		os.Exit(1)

@@ -35,6 +35,18 @@ func ExportTokensToTable(tokens []types.Token, writer io.Writer) error {
 			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)
 			rawOrText = truncate(token.Raw, 36)
 
+		case types.TokenHoverFg:
+			csiSignification = "-"
+			signification = "HOVER_FG"
+			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)
+			rawOrText = truncate(token.Raw, 36)
+
+		case types.TokenHoverBg:
+			csiSignification = "-"
+			signification = "HOVER_BG"
+			params = truncate(fmt.Sprintf("%v", token.Parameters), 15)
+			rawOrText = truncate(token.Raw, 36)
+
 		case types.TokenCSI:
 			csiSignification = truncate(token.CSINotation, 36)
 			signification = truncate(token.Signification, 36)

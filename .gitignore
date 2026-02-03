@@ -1,4 +1,6 @@
 ./splitans
+exported-html
+
 coverage.*
 
 16colors/

@@ -151,34 +151,52 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 		}
 
 		var textBuilder strings.Builder
+		rowMaxX := -1
+		for x := 0; x < vt.width; x++ {
+			if vt.buffer[y][x].Char != 0x0 {
+				rowMaxX = x
+			}
+		}
+		if rowMaxX == -1 {
+			rowMaxX = vt.width - 1
+		}
+		emittedTrailingChange := false
 
 		for x := 0; x < vt.width; x++ {
 			cell := vt.buffer[y][x]
 
 			// fmt.Printf("Processing cell at (%d, %d): Char='%c' SGR='%v'\n", x, y, cell.Char, cell.SGR)
 
-			// Detect SGR change
-			if !cell.SGR.Equals(currentSGR) {
-				line.Sequences = append(line.Sequences, types.SGRSequence{
-					Position: x,
-					SGR:      cell.SGR.Copy(),
-				})
-				currentSGR = cell.SGR.Copy()
-
-				// fmt.Printf("  Detected SGR change at position %d: New SGR='%v'\n", x, cell.SGR)
-			}
-
-			// Detect Hyperlink change
-			if !cell.Hyperlink.Equals(currentHyperlink) {
-				var hyperlinkCopy *types.Hyperlink
-				if cell.Hyperlink != nil {
-					hyperlinkCopy = cell.Hyperlink.Copy()
+			// Detect SGR/Hyperlink changes only up to last content column
+			if x <= rowMaxX {
+				if !cell.SGR.Equals(currentSGR) {
+					line.Sequences = append(line.Sequences, types.SGRSequence{
+						Position: x,
+						SGR:      cell.SGR.Copy(),
+					})
+					currentSGR = cell.SGR.Copy()
 				}
-				line.HyperlinkSequences = append(line.HyperlinkSequences, types.HyperlinkSequence{
-					Position:  x,
-					Hyperlink: hyperlinkCopy,
-				})
-				currentHyperlink = hyperlinkCopy
+
+				if !cell.Hyperlink.Equals(currentHyperlink) {
+					var hyperlinkCopy *types.Hyperlink
+					if cell.Hyperlink != nil {
+						hyperlinkCopy = cell.Hyperlink.Copy()
+					}
+					line.HyperlinkSequences = append(line.HyperlinkSequences, types.HyperlinkSequence{
+						Position:  x,
+						Hyperlink: hyperlinkCopy,
+					})
+					currentHyperlink = hyperlinkCopy
+				}
+			} else {
+				// Trailing area: emit a single SGR change if different, but keep currentSGR to preserve cross-line state
+				if !emittedTrailingChange && !cell.SGR.Equals(currentSGR) {
+					line.Sequences = append(line.Sequences, types.SGRSequence{
+						Position: x,
+						SGR:      cell.SGR.Copy(),
+					})
+					emittedTrailingChange = true
+				}
 			}
 
 			// Add character to text (replace 0x0 with space)
@@ -365,6 +383,43 @@ func (vt *VirtualTerminal) applyToken(token types.Token) error {
 	case types.TokenSGR:
 		vt.handleSGR(token.Parameters)
 
+	case types.TokenHoverFg:
+		if len(token.Parameters) >= 2 {
+			switch token.Parameters[0] {
+			case "std":
+				idx, _ := strconv.Atoi(token.Parameters[1])
+				vt.currentSGR.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: uint8(idx)}
+			case "idx":
+				idx, _ := strconv.Atoi(token.Parameters[1])
+				vt.currentSGR.LinkFgColor = types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
+			case "rgb":
+				if len(token.Parameters) == 4 {
+					r := parseByteString(token.Parameters[1])
+					g := parseByteString(token.Parameters[2])
+					b := parseByteString(token.Parameters[3])
+					vt.currentSGR.LinkFgColor = types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
+				}
+			}
+		}
+	case types.TokenHoverBg:
+		if len(token.Parameters) >= 2 {
+			switch token.Parameters[0] {
+			case "std":
+				idx, _ := strconv.Atoi(token.Parameters[1])
+				vt.currentSGR.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: uint8(idx)}
+			case "idx":
+				idx, _ := strconv.Atoi(token.Parameters[1])
+				vt.currentSGR.LinkBgColor = types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
+			case "rgb":
+				if len(token.Parameters) == 4 {
+					r := parseByteString(token.Parameters[1])
+					g := parseByteString(token.Parameters[2])
+					b := parseByteString(token.Parameters[3])
+					vt.currentSGR.LinkBgColor = types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
+				}
+			}
+		}
+
 	case types.TokenCSI:
 		vt.handleCSI(token)
 
@@ -373,6 +428,17 @@ func (vt *VirtualTerminal) applyToken(token types.Token) error {
 	}
 
 	return nil
+}
+
+func parseByteString(s string) uint8 {
+	v, err := strconv.Atoi(s)
+	if err != nil || v < 0 {
+		return 0
+	}
+	if v > 255 {
+		return 255
+	}
+	return uint8(v)
 }
 
 func (vt *VirtualTerminal) writeText(text string) {

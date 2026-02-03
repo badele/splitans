@@ -59,6 +59,8 @@ type SGR struct {
 	Reverse       bool
 	Hidden        bool
 	Strikethrough bool
+	LinkFgColor   ColorValue
+	LinkBgColor   ColorValue
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -108,16 +110,14 @@ func (c ColorValue) String() string {
 
 func NewSGR() *SGR {
 	return &SGR{
-		// FgColor: ColorValue{Type: ColorDefault},
-		// BgColor: ColorValue{Type: ColorDefault},
-		FgColor: ColorValue{Type: ColorStandard, Index: 7}, // Default to light gray for better visibility
-		BgColor: ColorValue{Type: ColorStandard, Index: 0}, // Default to black
+		FgColor:     ColorValue{Type: ColorStandard, Index: 7}, // Default to light gray for better visibility
+		BgColor:     ColorValue{Type: ColorStandard, Index: 0}, // Default to black
+		LinkFgColor: ColorValue{Type: ColorDefault},
+		LinkBgColor: ColorValue{Type: ColorDefault},
 	}
 }
 
 func (s *SGR) Reset() {
-	// s.FgColor = ColorValue{Type: ColorDefault}
-	// s.BgColor = ColorValue{Type: ColorDefault}
 	s.FgColor = ColorValue{Type: ColorStandard, Index: 7} // Default to light gray
 	s.BgColor = ColorValue{Type: ColorStandard, Index: 0} // Default to black
 	s.Bold = false
@@ -128,6 +128,7 @@ func (s *SGR) Reset() {
 	s.Reverse = false
 	s.Hidden = false
 	s.Strikethrough = false
+	// LinkFgColor / LinkBgColor ne sont pas reset ici (HF/HB persistants)
 }
 
 func (s *SGR) ApplyParams(params []int) {
@@ -340,7 +341,9 @@ func (s *SGR) Equals(other *SGR) bool {
 		s.Blink == other.Blink &&
 		s.Reverse == other.Reverse &&
 		s.Hidden == other.Hidden &&
-		s.Strikethrough == other.Strikethrough
+		s.Strikethrough == other.Strikethrough &&
+		s.LinkFgColor == other.LinkFgColor &&
+		s.LinkBgColor == other.LinkBgColor
 }
 
 func (s *SGR) Copy() *SGR {
@@ -355,6 +358,8 @@ func (s *SGR) Copy() *SGR {
 		Reverse:       s.Reverse,
 		Hidden:        s.Hidden,
 		Strikethrough: s.Strikethrough,
+		LinkFgColor:   s.LinkFgColor,
+		LinkBgColor:   s.LinkBgColor,
 	}
 }
 

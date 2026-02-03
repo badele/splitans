@@ -81,5 +81,7 @@ just neotex-all-from-ansi "<PATH>"
   - https://vt100.net/docs/vt510-rm/chapter4.html
   - https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
   - https://ecma-international.org/wp-content/uploads/ECMA-48_5th_edition_june_1991.pdf
+- Font
+  - https://int10h.org/oldschool-pc-fonts/fontlist/font?toshibasat_8x14
 - Logo Font
   - https://n0namen0.github.io/CODEF_Ansi_Logo_Maker/ (YAZOOX)

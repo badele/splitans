@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/badele/splitans/compare/v0.4.0...v0.5.0) (2026-02-03)
+
+
+### Features
+
+* add hyperlink and foreground and background hover color ([#18](https://github.com/badele/splitans/issues/18)) ([2d3df06](https://github.com/badele/splitans/commit/2d3df062c754f22307d718adcea46c9ebe40a354))
+
 ## [0.4.0](https://github.com/badele/splitans/compare/v0.3.0...v0.4.0) (2026-01-24)
 
 

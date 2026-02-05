@@ -11,7 +11,15 @@ import (
 
 // NeotexMetadata contains metadata extracted from neotex format
 type NeotexMetadata struct {
-	Version      int               // Format version (!V1 = 1)
+	// VersionRaw stores the raw version string after !V (e.g., "1.23")
+	VersionRaw string
+	// Version is kept for backward compatibility and mirrors VersionMajor.
+	Version int
+	// Parsed semantic version components (missing minor/patch default to 0)
+	VersionMajor int
+	VersionMinor int
+	VersionPatch int
+
 	TrimmedWidth int               // Trimmed width (!TW73/80 -> 73)
 	Width        int               // Total width (!TW73/80 -> 80)
 	NbLines      int               // Number of lines with content (!NL<n>)
@@ -45,10 +53,15 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 			// Remove '!' prefix for other metadata
 			entryWithoutPrefix := entry[1:]
 
-			// Check for version: V<number>
+			// Check for version: V<semver>
 			if strings.HasPrefix(entryWithoutPrefix, "V") {
-				if v, err := strconv.Atoi(entryWithoutPrefix[1:]); err == nil {
-					meta.Version = v
+				versionStr := entryWithoutPrefix[1:]
+				meta.VersionRaw = versionStr
+				if major, minor, patch, ok := parseNeotexVersion(versionStr); ok {
+					meta.VersionMajor = major
+					meta.VersionMinor = minor
+					meta.VersionPatch = patch
+					meta.Version = major // legacy major-only field
 				}
 				continue
 			}
@@ -438,6 +451,30 @@ func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink
 	}
 
 	return styles
+}
+
+// parseNeotexVersion parses a version string that may contain 1 to 3 numeric segments.
+// Missing minor or patch segments default to 0 (e.g., "1" -> 1.0.0, "1.2" -> 1.2.0).
+func parseNeotexVersion(raw string) (int, int, int, bool) {
+	if raw == "" {
+		return 0, 0, 0, false
+	}
+
+	parts := strings.Split(raw, ".")
+	if len(parts) == 0 || len(parts) > 3 {
+		return 0, 0, 0, false
+	}
+
+	var nums [3]int
+	for i, part := range parts {
+		n, err := strconv.Atoi(part)
+		if err != nil {
+			return 0, 0, 0, false
+		}
+		nums[i] = n
+	}
+
+	return nums[0], nums[1], nums[2], true
 }
 
 // parseLineSequences parses sequences for a single line

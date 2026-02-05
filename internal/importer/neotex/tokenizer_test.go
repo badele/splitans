@@ -1,9 +1,12 @@
 package neotex
 
 import (
+	"fmt"
 	"reflect"
+	"strconv"
 	"testing"
 
+	"github.com/badele/splitans/internal/exporter"
 	"github.com/badele/splitans/internal/types"
 )
 
@@ -234,6 +237,11 @@ func TestApplyNeotexCodeReset(t *testing.T) {
 }
 
 func TestExtractMetadata(t *testing.T) {
+	versionMajor, err := strconv.Atoi(exporter.NeotexVersion)
+	if err != nil {
+		t.Fatalf("invalid NeotexVersion %q: %v", exporter.NeotexVersion, err)
+	}
+
 	tests := []struct {
 		name     string
 		seqLines []string
@@ -241,10 +249,24 @@ func TestExtractMetadata(t *testing.T) {
 	}{
 		{
 			name:     "Version only",
-			seqLines: []string{"!V1"},
+			seqLines: []string{fmt.Sprintf("!V%s", exporter.NeotexVersion)},
 			expected: NeotexMetadata{
-				Version: 1,
-				Extra:   make(map[string]string),
+				VersionRaw:   exporter.NeotexVersion,
+				Version:      versionMajor,
+				VersionMajor: versionMajor,
+				Extra:        make(map[string]string),
+			},
+		},
+		{
+			name:     "Semver version",
+			seqLines: []string{fmt.Sprintf("!V%s.23", exporter.NeotexVersion)},
+			expected: NeotexMetadata{
+				VersionRaw:   fmt.Sprintf("%s.23", exporter.NeotexVersion),
+				Version:      versionMajor,
+				VersionMajor: versionMajor,
+				VersionMinor: 23,
+				VersionPatch: 0,
+				Extra:        make(map[string]string),
 			},
 		},
 		{
@@ -266,9 +288,11 @@ func TestExtractMetadata(t *testing.T) {
 		},
 		{
 			name:     "Multiple metadata",
-			seqLines: []string{"!V1; !TW73/80; !NL42"},
+			seqLines: []string{fmt.Sprintf("!V%s; !TW73/80; !NL42", exporter.NeotexVersion)},
 			expected: NeotexMetadata{
-				Version:      1,
+				VersionRaw:   exporter.NeotexVersion,
+				Version:      versionMajor,
+				VersionMajor: versionMajor,
 				TrimmedWidth: 73,
 				Width:        80,
 				NbLines:      42,
@@ -277,10 +301,12 @@ func TestExtractMetadata(t *testing.T) {
 		},
 		{
 			name:     "Mixed with sequences",
-			seqLines: []string{"1:Fr; !V1", "2:Fg"},
+			seqLines: []string{fmt.Sprintf("1:Fr; !V%s", exporter.NeotexVersion), "2:Fg"},
 			expected: NeotexMetadata{
-				Version: 1,
-				Extra:   make(map[string]string),
+				VersionRaw:   exporter.NeotexVersion,
+				Version:      versionMajor,
+				VersionMajor: versionMajor,
+				Extra:        make(map[string]string),
 			},
 		},
 	}
@@ -288,8 +314,20 @@ func TestExtractMetadata(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			meta := ExtractMetadata(tt.seqLines)
+			if meta.VersionRaw != tt.expected.VersionRaw {
+				t.Errorf("VersionRaw: expected %q, got %q", tt.expected.VersionRaw, meta.VersionRaw)
+			}
 			if meta.Version != tt.expected.Version {
 				t.Errorf("Version: expected %d, got %d", tt.expected.Version, meta.Version)
+			}
+			if meta.VersionMajor != tt.expected.VersionMajor {
+				t.Errorf("VersionMajor: expected %d, got %d", tt.expected.VersionMajor, meta.VersionMajor)
+			}
+			if meta.VersionMinor != tt.expected.VersionMinor {
+				t.Errorf("VersionMinor: expected %d, got %d", tt.expected.VersionMinor, meta.VersionMinor)
+			}
+			if meta.VersionPatch != tt.expected.VersionPatch {
+				t.Errorf("VersionPatch: expected %d, got %d", tt.expected.VersionPatch, meta.VersionPatch)
 			}
 			if meta.TrimmedWidth != tt.expected.TrimmedWidth {
 				t.Errorf("TrimmedWidth: expected %d, got %d", tt.expected.TrimmedWidth, meta.TrimmedWidth)
@@ -440,7 +478,7 @@ func TestParseLineSequences(t *testing.T) {
 		},
 		{
 			name:    "Skip metadata",
-			seqLine: "!V1; 1:Fr",
+			seqLine: fmt.Sprintf("!V%s.23; 1:Fr", exporter.NeotexVersion),
 			expected: []styleChange{
 				{position: 0, codes: []string{"Fr"}},
 			},

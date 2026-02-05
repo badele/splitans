@@ -11,6 +11,19 @@
           "path": "flake.nix"
         }
       ]
+    },
+    "neotex-format": {
+      "release-type": "simple",
+      "package-name": "neotex-format",
+      "path": "internal",
+      "include-component-in-tag": true,
+      "changelog-path": "CHANGELOG-neotex.md",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "internal/exporter/neotex.go"
+        }
+      ]
     }
   },
   "changelog-sections": [

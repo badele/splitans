@@ -9,7 +9,7 @@ import (
 )
 
 // NeotexVersion is the current version of the neotex format
-const NeotexVersion = 1
+const NeotexVersion = "1" // x-release-please-version
 
 // Neotex color codes indexed by ColorValue.Index (0-15)
 // Index 0-7: normal colors (lowercase), Index 8-15: bright colors (uppercase)
@@ -497,7 +497,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 
 		// Add version metadata on the first line
 		if lineIdx == 0 {
-			lineSeqs = append(lineSeqs, fmt.Sprintf("!V%d", NeotexVersion))
+			lineSeqs = append(lineSeqs, fmt.Sprintf("!V%s", NeotexVersion))
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!TW%d/%d", maxWidth, textWidth))
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!NL%d", lineCount))
 		}

@@ -22,6 +22,8 @@ var neotexBgColors = []string{
 	"Bk", "Br", "Bg", "By", "Bb", "Bm", "Bc", "Bw", // 0-7: normal
 }
 
+const neotexForbiddenLabelChars = " ;,:<>"
+
 // ============================================================================
 // EXPORTED
 // ============================================================================
@@ -292,36 +294,71 @@ func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []types.Tok
 	return exportFlattenedNeotexWithSauce(width, nblines, tokens, true, crop, sauce)
 }
 
+// formatNeotexLabel chooses between the short form (!KEYvalue) and protected form
+// (!KEY<value>) depending on the content. Forbidden characters for the short form
+// are space, ';', ',', ':', '<', '>'. Angle brackets are rejected outright.
+func formatNeotexLabel(key, value string) (string, error) {
+	if strings.ContainsAny(value, "<>") {
+		return "", fmt.Errorf("neotex label %s contains forbidden angle bracket", key)
+	}
+
+	if strings.ContainsAny(value, neotexForbiddenLabelChars) {
+		return fmt.Sprintf("!%s<%s>", key, value), nil
+	}
+
+	return fmt.Sprintf("!%s%s", key, value), nil
+}
+
 // sauceToNeotexLabels converts SAUCE metadata to neotex label format.
 // All SAUCE labels start with "!S" prefix, so no separate marker is needed.
 // Note: Width and Height are not exported here as they use !TW and !NL metadata.
-func sauceToNeotexLabels(sauce *types.Sauce) []string {
+func sauceToNeotexLabels(sauce *types.Sauce) ([]string, error) {
 	if sauce == nil {
-		return nil
+		return nil, nil
 	}
 
 	var labels []string
 
 	if sauce.Title != "" {
-		labels = append(labels, fmt.Sprintf("!ST<%s>", sauce.Title))
+		label, err := formatNeotexLabel("ST", sauce.Title)
+		if err != nil {
+			return nil, err
+		}
+		labels = append(labels, label)
 	}
 	if sauce.Author != "" {
-		labels = append(labels, fmt.Sprintf("!SA<%s>", sauce.Author))
+		label, err := formatNeotexLabel("SA", sauce.Author)
+		if err != nil {
+			return nil, err
+		}
+		labels = append(labels, label)
 	}
 	if sauce.Group != "" {
-		labels = append(labels, fmt.Sprintf("!SG<%s>", sauce.Group))
+		label, err := formatNeotexLabel("SG", sauce.Group)
+		if err != nil {
+			return nil, err
+		}
+		labels = append(labels, label)
 	}
 	if !sauce.Date.IsZero() {
-		labels = append(labels, fmt.Sprintf("!SD<%s>", sauce.Date.Format("20060102")))
+		label, err := formatNeotexLabel("SD", sauce.Date.Format("20060102"))
+		if err != nil {
+			return nil, err
+		}
+		labels = append(labels, label)
 	}
 	if sauce.TInfoS != "" {
-		labels = append(labels, fmt.Sprintf("!SF<%s>", sauce.TInfoS))
+		label, err := formatNeotexLabel("SF", sauce.TInfoS)
+		if err != nil {
+			return nil, err
+		}
+		labels = append(labels, label)
 	}
 	if sauce.HasICEColors() {
 		labels = append(labels, "!SI")
 	}
 
-	return labels
+	return labels, nil
 }
 
 // ============================================================================
@@ -635,7 +672,10 @@ func exportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, in
 	}
 
 	// Append SAUCE line: empty text line + SAUCE labels
-	sauceLabels := sauceToNeotexLabels(sauce)
+	sauceLabels, err := sauceToNeotexLabels(sauce)
+	if err != nil {
+		return "", "", 0, err
+	}
 	if len(sauceLabels) > 0 {
 		// Add a new line with empty text (spaces to match width) and SAUCE labels
 		text += "\n" + strings.Repeat(" ", effectiveWidth)

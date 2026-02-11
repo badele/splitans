@@ -448,7 +448,7 @@ func (t *Tokenizer) appendHoverTokens() {
 			offset += len([]rune(t.textLines[lineIdx]))
 			continue
 		}
-		entries := strings.Split(line, ";")
+		entries := splitNeotexEntries(line)
 		for _, entry := range entries {
 			entry = strings.TrimSpace(entry)
 			if entry == "" || strings.HasPrefix(entry, "!") {

@@ -142,3 +142,53 @@ func TestExportToInlineNeotex(t *testing.T) {
 		t.Fatalf("unexpected inline sequences: got %q, want %q", sequences, expectedSequences)
 	}
 }
+
+func TestFormatNeotexLabel(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		value    string
+		expected string
+		wantErr  bool
+	}{
+		{name: "short form", key: "ST", value: "Title", expected: "!STTitle"},
+		{name: "protected with space", key: "ST", value: "Hello World", expected: "!ST<Hello World>"},
+		{name: "protected with punctuation", key: "SA", value: "Doe;Smith", expected: "!SA<Doe;Smith>"},
+		{name: "forbidden angle bracket", key: "ST", value: "Bad<Title", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := formatNeotexLabel(tt.key, tt.value)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.expected {
+				t.Fatalf("unexpected label: got %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestSauceToNeotexLabelsProtectedAndRejected(t *testing.T) {
+	sauce := &types.Sauce{Title: "Hello World", Author: "Jane"}
+	labels, err := sauceToNeotexLabels(sauce)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	joined := strings.Join(labels, ";")
+	if !strings.Contains(joined, "!ST<Hello World>") {
+		t.Fatalf("expected protected title label, got %q", joined)
+	}
+
+	badSauce := &types.Sauce{Title: "Bad<Title"}
+	if _, err := sauceToNeotexLabels(badSauce); err == nil {
+		t.Fatalf("expected error for forbidden angle bracket")
+	}
+}

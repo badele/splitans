@@ -50,6 +50,14 @@ curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F tabl
 curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F stats
 ```
 
+## Neotex Metadata
+
+Metadata entries live in the sequence column and start with `!` (for example
+`!V1.2.0`, `!TW73/80`, `!NL42`, or SAUCE labels like `!STTitle`). Use the short
+form `!KEYvalue` when the value has no separators, and the protected form
+`!KEY<value>` when it contains spaces or characters such as `;`, `,`, or `:`.
+Metadata values must not contain `<` or `>`; those are rejected on import.
+
 ## Output Examples
 
 Here are the results of the `splitans` commands, in order:

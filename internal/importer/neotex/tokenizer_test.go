@@ -483,6 +483,13 @@ func TestParseLineSequences(t *testing.T) {
 				{position: 0, codes: []string{"Fr"}},
 			},
 		},
+		{
+			name:    "Skip protected metadata",
+			seqLine: "!ST<Hello;World>; 1:Fr",
+			expected: []styleChange{
+				{position: 0, codes: []string{"Fr"}},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -571,6 +578,37 @@ func TestApplyNeotexHyperlinkCode(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestExtractMetadataSauceShortAndProtected(t *testing.T) {
+	seqLines := []string{"!ST<Hello;World>; !SAJane; !SG<ACME, Inc.>; 1:Fr"}
+	meta := ExtractMetadata(seqLines)
+	if meta.Sauce == nil {
+		t.Fatalf("expected SAUCE metadata to be parsed")
+	}
+	if meta.Sauce.Title != "Hello;World" {
+		t.Fatalf("unexpected title: got %q", meta.Sauce.Title)
+	}
+	if meta.Sauce.Author != "Jane" {
+		t.Fatalf("unexpected author: got %q", meta.Sauce.Author)
+	}
+	if meta.Sauce.Group != "ACME, Inc." {
+		t.Fatalf("unexpected group: got %q", meta.Sauce.Group)
+	}
+}
+
+func TestExtractMetadataRejectsAngleBrackets(t *testing.T) {
+	seqLines := []string{"!STBad>Title; !SAJane"}
+	meta := ExtractMetadata(seqLines)
+	if meta.Sauce == nil {
+		t.Fatalf("expected SAUCE metadata to be parsed")
+	}
+	if meta.Sauce.Title != "" {
+		t.Fatalf("expected title to be rejected, got %q", meta.Sauce.Title)
+	}
+	if meta.Sauce.Author != "Jane" {
+		t.Fatalf("unexpected author: got %q", meta.Sauce.Author)
 	}
 }
 

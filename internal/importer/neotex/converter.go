@@ -2,6 +2,7 @@ package neotex
 
 import (
 	"bytes"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,64 @@ type NeotexMetadata struct {
 	Sauce        *types.Sauce      // SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
 }
 
+func validateNeotexLabelValue(key, value string) error {
+	if strings.ContainsAny(value, "<>") {
+		return fmt.Errorf("neotex label %s contains forbidden angle bracket", key)
+	}
+	return nil
+}
+
+// parseNeotexLabel extracts a label value for a known key (short or protected form).
+func parseNeotexLabel(token, key string) (string, bool, error) {
+	prefix := "!" + key
+	if !strings.HasPrefix(token, prefix) {
+		return "", false, nil
+	}
+
+	rest := token[len(prefix):]
+	if rest == "" {
+		return "", true, nil
+	}
+
+	if strings.HasPrefix(rest, "<") {
+		if !strings.HasSuffix(rest, ">") {
+			return "", true, fmt.Errorf("neotex label %s missing closing bracket", key)
+		}
+		value := rest[1 : len(rest)-1]
+		if err := validateNeotexLabelValue(key, value); err != nil {
+			return "", true, err
+		}
+		return value, true, nil
+	}
+
+	if err := validateNeotexLabelValue(key, rest); err != nil {
+		return "", true, err
+	}
+
+	return rest, true, nil
+}
+
+// parseProtectedMetadata extracts key/value from a protected metadata entry (!KEY<value>).
+func parseProtectedMetadata(token string) (string, string, bool, error) {
+	if !strings.HasPrefix(token, "!") {
+		return "", "", false, nil
+	}
+	body := token[1:]
+	idx := strings.Index(body, "<")
+	if idx <= 0 {
+		return "", "", false, nil
+	}
+	if !strings.HasSuffix(body, ">") {
+		return "", "", true, fmt.Errorf("neotex metadata %s missing closing bracket", body[:idx])
+	}
+	key := body[:idx]
+	value := body[idx+1 : len(body)-1]
+	if err := validateNeotexLabelValue(key, value); err != nil {
+		return "", "", true, err
+	}
+	return key, value, true, nil
+}
+
 // ExtractMetadata extracts metadata from sequence lines
 // Metadata entries start with '!' (e.g., !V1 for version)
 // Also extracts SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
@@ -40,7 +99,7 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 	var allTokens []string
 
 	for _, seqLine := range seqLines {
-		entries := strings.Split(seqLine, ";")
+		entries := splitNeotexEntries(seqLine)
 		for _, entry := range entries {
 			entry = strings.TrimSpace(entry)
 			if !strings.HasPrefix(entry, "!") {
@@ -54,8 +113,10 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 			entryWithoutPrefix := entry[1:]
 
 			// Check for version: V<semver>
-			if strings.HasPrefix(entryWithoutPrefix, "V") {
-				versionStr := entryWithoutPrefix[1:]
+			if versionStr, ok, err := parseNeotexLabel(entry, "V"); ok {
+				if err != nil || versionStr == "" {
+					continue
+				}
 				meta.VersionRaw = versionStr
 				if major, minor, patch, ok := parseNeotexVersion(versionStr); ok {
 					meta.VersionMajor = major
@@ -67,8 +128,10 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 			}
 
 			// Check trimmed width TW<trimmed>/<total> or TW<number>
-			if strings.HasPrefix(entryWithoutPrefix, "TW") {
-				twValue := entryWithoutPrefix[2:]
+			if twValue, ok, err := parseNeotexLabel(entry, "TW"); ok {
+				if err != nil || twValue == "" {
+					continue
+				}
 				if parts := strings.Split(twValue, "/"); len(parts) == 2 {
 					// Format: TW73/80
 					if v, err := strconv.Atoi(parts[0]); err == nil {
@@ -82,10 +145,21 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 			}
 
 			// Check number of lines NL<number>
-			if strings.HasPrefix(entryWithoutPrefix, "NL") {
-				if v, err := strconv.Atoi(entryWithoutPrefix[2:]); err == nil {
+			if nlValue, ok, err := parseNeotexLabel(entry, "NL"); ok {
+				if err != nil || nlValue == "" {
+					continue
+				}
+				if v, err := strconv.Atoi(nlValue); err == nil {
 					meta.NbLines = v
 				}
+				continue
+			}
+
+			if key, value, ok, err := parseProtectedMetadata(entry); ok {
+				if err != nil {
+					continue
+				}
+				meta.Extra[key] = value
 				continue
 			}
 
@@ -131,40 +205,59 @@ func parseSauceLabels(tokens []string) *types.Sauce {
 			sauce = &types.Sauce{}
 		}
 
-		switch {
-		case strings.HasPrefix(token, "!ST<"):
-			sauce.Title = extractLabelValue(token)
-		case strings.HasPrefix(token, "!SA<"):
-			sauce.Author = extractLabelValue(token)
-		case strings.HasPrefix(token, "!SG<"):
-			sauce.Group = extractLabelValue(token)
-		case strings.HasPrefix(token, "!SD<"):
-			sauce.Date, _ = time.Parse("20060102", extractLabelValue(token))
-		case strings.HasPrefix(token, "!SW<"):
-			w, _ := strconv.Atoi(extractLabelValue(token))
-			sauce.TInfo1 = uint16(w)
-		case strings.HasPrefix(token, "!SH<"):
-			h, _ := strconv.Atoi(extractLabelValue(token))
-			sauce.TInfo2 = uint16(h)
-		case strings.HasPrefix(token, "!SF<"):
-			sauce.TInfoS = extractLabelValue(token)
-		case token == "!SI":
+		if token == "!SI" {
 			sauce.SetICEColors(true)
+			continue
+		}
+		if value, ok, err := parseNeotexLabel(token, "ST"); ok {
+			if err == nil {
+				sauce.Title = value
+			}
+			continue
+		}
+		if value, ok, err := parseNeotexLabel(token, "SA"); ok {
+			if err == nil {
+				sauce.Author = value
+			}
+			continue
+		}
+		if value, ok, err := parseNeotexLabel(token, "SG"); ok {
+			if err == nil {
+				sauce.Group = value
+			}
+			continue
+		}
+		if value, ok, err := parseNeotexLabel(token, "SD"); ok {
+			if err == nil {
+				sauce.Date, _ = time.Parse("20060102", value)
+			}
+			continue
+		}
+		if value, ok, err := parseNeotexLabel(token, "SW"); ok {
+			if err == nil {
+				if w, err := strconv.Atoi(value); err == nil {
+					sauce.TInfo1 = uint16(w)
+				}
+			}
+			continue
+		}
+		if value, ok, err := parseNeotexLabel(token, "SH"); ok {
+			if err == nil {
+				if h, err := strconv.Atoi(value); err == nil {
+					sauce.TInfo2 = uint16(h)
+				}
+			}
+			continue
+		}
+		if value, ok, err := parseNeotexLabel(token, "SF"); ok {
+			if err == nil {
+				sauce.TInfoS = value
+			}
+			continue
 		}
 	}
 
 	return sauce
-}
-
-// extractLabelValue extracts the value between < and > from a label.
-// e.g., "!ST<Fire Calendar 2025>" returns "Fire Calendar 2025"
-func extractLabelValue(label string) string {
-	start := strings.Index(label, "<")
-	end := strings.LastIndex(label, ">")
-	if start >= 0 && end > start {
-		return label[start+1 : end]
-	}
-	return ""
 }
 
 // ConvertNeotexToANSI converts neotex format (text + sequences) to raw ANSI format
@@ -367,7 +460,7 @@ func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink
 	}
 
 	// Split by semicolons to get position entries
-	entries := strings.Split(seqLine, ";")
+	entries := splitNeotexEntries(seqLine)
 
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
@@ -487,7 +580,7 @@ func parseLineSequences(seqLine string) []styleChange {
 	}
 
 	// Split by semicolons to get position entries
-	entries := strings.Split(seqLine, ";")
+	entries := splitNeotexEntries(seqLine)
 
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)

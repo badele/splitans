@@ -481,6 +481,10 @@ func (vt *VirtualTerminal) writeText(text string) {
 				vt.cursorX = 0
 				vt.cursorY++
 				vt.lastWrapped = true
+
+				if vt.debugCursor {
+					fmt.Printf("Soft wrap occurred, moving to next line. Cursor at (%d, %d)\n", vt.cursorX, vt.cursorY)
+				}
 			}
 
 			if vt.debugCursor {

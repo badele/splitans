@@ -45,7 +45,7 @@ func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncodin
 
 // ExportFlattenedANSIWithSauce exports tokens to flattened ANSI format with SAUCE metadata appended.
 // If sauce is nil, behaves identically to ExportFlattenedANSI.
-// When sauce is provided, the actual content dimensions are calculated and stored in the SAUCE record.
+// When dimensions are missing in the SAUCE record, content bounds are used to fill them.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
 	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, false, crop, sauce)
@@ -87,12 +87,24 @@ func exportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outp
 		return ansiOutput, effectiveWidth, nil
 	}
 
-	// Get content bounds to determine actual dimensions
-	bounds := vt.GetContentBounds()
-	if !bounds.Empty {
-		sauce.SetDimensions(bounds.Width, bounds.Height)
-	} else {
-		sauce.SetDimensions(effectiveWidth, 0)
+	// Fill missing dimensions from content bounds when not provided
+	if sauce.TInfo1 == 0 || sauce.TInfo2 == 0 {
+		bounds := vt.GetContentBounds()
+		if bounds.Empty {
+			if sauce.TInfo1 == 0 {
+				sauce.TInfo1 = uint16(effectiveWidth)
+			}
+			if sauce.TInfo2 == 0 {
+				sauce.TInfo2 = 0
+			}
+		} else {
+			if sauce.TInfo1 == 0 {
+				sauce.TInfo1 = uint16(bounds.Width)
+			}
+			if sauce.TInfo2 == 0 {
+				sauce.TInfo2 = uint16(bounds.Height)
+			}
+		}
 	}
 
 	// Set file size (size of ANSI content before SAUCE)

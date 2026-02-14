@@ -214,10 +214,18 @@ func main() {
 		var ansiOutput string
 		var err error
 
-		// Create SAUCE record if requested
+		// Create or reuse SAUCE record if requested
 		var sauce *types.Sauce
 		if cli.Output.Sauce {
-			sauce = types.NewSauce(cli.Output.Width, cli.Output.Lines)
+			for _, token := range tokens {
+				if token.Type == types.TokenSauce && token.Sauce != nil {
+					sauce = token.Sauce
+					break
+				}
+			}
+			if sauce == nil {
+				sauce = types.NewSauce(cli.Output.Width, cli.Output.Lines)
+			}
 		}
 
 		if cli.Output.Inline {

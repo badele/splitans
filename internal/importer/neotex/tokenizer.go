@@ -369,7 +369,11 @@ func (t *Tokenizer) Tokenize() []types.Token {
 	meta := ExtractMetadata(t.seqLines)
 
 	// Convert neotex format to ANSI format (for base tokens)
-	ansiData := ConvertNeotexToANSI(t.textLines, t.seqLines)
+	ansiData, err := ConvertNeotexToANSI(t.textLines, t.seqLines)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing neotex: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Use the existing ANSI tokenizer
 	ansiTokenizer := ansi.NewANSITokenizer(ansiData)

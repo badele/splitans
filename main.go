@@ -37,10 +37,6 @@ type CLI struct {
 		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
 		Sauce     bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
 	} `embed:"" prefix:"" group:"Output options:"`
-
-	Debug struct {
-		Debug bool `short:"d" help:"Enable debug mode (displays cursor positions)"`
-	} `embed:"" prefix:"" group:"Debug options:"`
 }
 
 // ============================================================================

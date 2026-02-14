@@ -464,6 +464,11 @@ func (vt *VirtualTerminal) writeText(text string) {
 			if vt.currentHyperlink != nil {
 				hyperlinkCopy = vt.currentHyperlink.Copy()
 			}
+
+			if vt.debugCursor {
+				fmt.Printf("Writing char '%c' with SGR '%v'\n", r, vt.currentSGR)
+			}
+
 			vt.buffer[vt.cursorY][vt.cursorX] = types.Cell{
 				Char:      r,
 				SGR:       vt.currentSGR.Copy(),

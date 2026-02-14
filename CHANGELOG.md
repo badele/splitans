@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0](https://github.com/badele/splitans/compare/v0.5.0...v0.6.0) (2026-02-14)
+
+
+### Features
+
+* fix neotex parser ([#25](https://github.com/badele/splitans/issues/25)) ([32cef95](https://github.com/badele/splitans/commit/32cef95ed9ca62349f7cc3337d51d90e2b5f156b))
+* ignore null & space character ([#22](https://github.com/badele/splitans/issues/22)) ([f610e5c](https://github.com/badele/splitans/commit/f610e5c0e10f9b88386f93001aa5a0218354525b))
+* update metadata ([#21](https://github.com/badele/splitans/issues/21)) ([efac7c6](https://github.com/badele/splitans/commit/efac7c6a42d1985fffeef09e90a6226006e3f177))
+* update neotex versioning ([#20](https://github.com/badele/splitans/issues/20)) ([71e8555](https://github.com/badele/splitans/commit/71e8555334f2beb556cdece07762fe9bc143d00c))
+
+
+### Bug Fixes
+
+* sauce dimension ([#26](https://github.com/badele/splitans/issues/26)) ([f2fc396](https://github.com/badele/splitans/commit/f2fc39659a3241c34eb2dbe838600c14f6fade70))
+
+
+### Miscellaneous
+
+* fix release please version ([#27](https://github.com/badele/splitans/issues/27)) ([c8e622d](https://github.com/badele/splitans/commit/c8e622d4d7d44fcae47d5e639b767218ff3c0a05))
+
 ## [0.5.0](https://github.com/badele/splitans/compare/v0.4.0...v0.5.0) (2026-02-03)
 
 

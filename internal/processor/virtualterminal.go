@@ -240,28 +240,20 @@ func (vt *VirtualTerminal) GetHeight() int {
 }
 
 // GetContentBounds calculates the bounding box of actual content.
-// Ignores null characters and default-style spaces (equivalent to R0).
+// Ignores only null characters (0x00). Spaces are considered content.
 // Returns ContentBounds with Empty=true if no content found.
 func (vt *VirtualTerminal) GetContentBounds() ContentBounds {
 	minX, minY := vt.width, vt.height
 	maxX, maxY := -1, -1
-	defaultSGR := types.NewSGR()
 
 	for y := 0; y < vt.height; y++ {
 		for x := 0; x < vt.width; x++ {
-			cell := vt.buffer[y][x]
-			if cell.Char == 0 {
-				continue
+			if vt.buffer[y][x].Char != 0 {
+				minX = min(minX, x)
+				maxX = max(maxX, x)
+				minY = min(minY, y)
+				maxY = max(maxY, y)
 			}
-			if cell.Char == ' ' && cell.Hyperlink == nil {
-				if cell.SGR == nil || cell.SGR.Equals(defaultSGR) {
-					continue
-				}
-			}
-			minX = min(minX, x)
-			maxX = max(maxX, x)
-			minY = min(minY, y)
-			maxY = max(maxY, y)
 		}
 	}
 

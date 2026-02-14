@@ -289,28 +289,14 @@ func TestGetContentBounds(t *testing.T) {
 			},
 		},
 		{
-			name:   "Only default spaces (ignored)",
+			name:   "Only spaces (counted as content)",
 			width:  10,
 			height: 5,
 			tokens: []types.Token{
 				{Type: types.TokenText, Value: "   "},
 			},
-			expected: ContentBounds{Empty: true},
-		},
-		{
-			name:   "Count styled spaces",
-			width:  10,
-			height: 5,
-			tokens: []types.Token{
-				{Type: types.TokenText, Value: " "},
-				{Type: types.TokenText, Value: "A"},
-				{Type: types.TokenText, Value: " "},
-				{Type: types.TokenSGR, Parameters: []string{"41"}},
-				{Type: types.TokenText, Value: " "},
-				{Type: types.TokenSGR, Parameters: []string{"0"}},
-			},
 			expected: ContentBounds{
-				MinX: 1, MaxX: 3, MinY: 0, MaxY: 0,
+				MinX: 0, MaxX: 2, MinY: 0, MaxY: 0,
 				Width: 3, Height: 1, Empty: false,
 			},
 		},

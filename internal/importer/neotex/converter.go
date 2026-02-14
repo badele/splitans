@@ -264,7 +264,7 @@ func parseSauceLabels(tokens []string) *types.Sauce {
 // This allows reusing the existing ANSI tokenizer instead of duplicating parsing logic
 // Tracks SGR state across lines for proper differential encoding
 // Takes arrays of lines (without embedded \n) for cleaner processing
-func ConvertNeotexToANSI(textLines []string, seqLines []string) []byte {
+func ConvertNeotexToANSI(textLines []string, seqLines []string) ([]byte, error) {
 	var result bytes.Buffer
 	currentSGR := types.NewSGR() // Track SGR state across lines
 
@@ -274,7 +274,10 @@ func ConvertNeotexToANSI(textLines []string, seqLines []string) []byte {
 			seqLine = seqLines[i]
 		}
 
-		ansiLine, newSGR := convertLineToANSI(textLine, seqLine, currentSGR)
+		ansiLine, newSGR, err := convertLineToANSI(textLine, seqLine, currentSGR)
+		if err != nil {
+			return nil, fmt.Errorf("neotex line %d: %w", i+1, err)
+		}
 		currentSGR = newSGR
 
 		result.WriteString(ansiLine)
@@ -285,7 +288,7 @@ func ConvertNeotexToANSI(textLines []string, seqLines []string) []byte {
 		// }
 	}
 
-	return result.Bytes()
+	return result.Bytes(), nil
 }
 
 // styleChange represents a style change at a specific position
@@ -306,20 +309,23 @@ type styleChangeWithHyperlink struct {
 
 // convertLineToANSI converts a single line of text with its sequences to ANSI
 // Takes the current SGR state and returns the updated state after processing
-func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR) (string, *types.SGR) {
+func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR) (string, *types.SGR, error) {
 	return convertLineToANSIWithHyperlink(textLine, seqLine, currentSGR, nil)
 }
 
 // convertLineToANSIWithHyperlink converts a single line of text with its sequences to ANSI
 // Takes the current SGR and Hyperlink state and returns the updated states after processing
-func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR *types.SGR, currentHyperlink *types.Hyperlink) (string, *types.SGR) {
+func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR *types.SGR, currentHyperlink *types.Hyperlink) (string, *types.SGR, error) {
 	if seqLine == "" {
-		return textLine, currentSGR
+		return textLine, currentSGR, nil
 	}
 
-	styles := parseLineSequencesWithHyperlinks(seqLine)
+	styles, err := parseLineSequencesWithHyperlinks(seqLine)
+	if err != nil {
+		return "", currentSGR, err
+	}
 	if len(styles) == 0 {
-		return textLine, currentSGR
+		return textLine, currentSGR, nil
 	}
 
 	// Build ANSI output by inserting escape sequences at the right positions
@@ -371,7 +377,7 @@ func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR 
 		result.WriteString(string(textRunes[textPos:]))
 	}
 
-	return result.String(), currentSGR
+	return result.String(), currentSGR, nil
 }
 
 // hyperlinkToOSC8 converts a Hyperlink to an OSC 8 escape sequence.
@@ -399,11 +405,13 @@ func hyperlinkToOSC8(h *types.Hyperlink) string {
 // parseLineSequencesWithHyperlinks parses sequences for a single line, including hyperlinks.
 // Returns a slice of styleChangeWithHyperlink in the order they appear.
 // Metadata entries starting with '!' are ignored (e.g., !V1 for version)
-func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink {
+func parseLineSequencesWithHyperlinks(seqLine string) ([]styleChangeWithHyperlink, error) {
 	var styles []styleChangeWithHyperlink
 	if seqLine == "" {
-		return styles
+		return styles, nil
 	}
+
+	lastPosition := -1
 
 	parseHoverColorValue := func(code string) *types.ColorValue {
 		if len(code) == 0 {
@@ -485,6 +493,10 @@ func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink
 		}
 		// Convert 1-indexed (editor format) to 0-indexed (internal)
 		position--
+		if position <= lastPosition {
+			return nil, fmt.Errorf("sequence positions must be strictly increasing: %d <= %d", position+1, lastPosition+1)
+		}
+		lastPosition = position
 
 		// Parse styles separated by commas
 		stylesStr := strings.TrimSpace(parts[1])
@@ -543,7 +555,7 @@ func parseLineSequencesWithHyperlinks(seqLine string) []styleChangeWithHyperlink
 		}
 	}
 
-	return styles
+	return styles, nil
 }
 
 // parseNeotexVersion parses a version string that may contain 1 to 3 numeric segments.
@@ -573,11 +585,13 @@ func parseNeotexVersion(raw string) (int, int, int, bool) {
 // parseLineSequences parses sequences for a single line
 // Returns a slice of styleChange in the order they appear (already sorted)
 // Metadata entries starting with '!' are ignored (e.g., !V1 for version)
-func parseLineSequences(seqLine string) []styleChange {
+func parseLineSequences(seqLine string) ([]styleChange, error) {
 	var styles []styleChange
 	if seqLine == "" {
-		return styles
+		return styles, nil
 	}
+
+	lastPosition := -1
 
 	// Split by semicolons to get position entries
 	entries := splitNeotexEntries(seqLine)
@@ -605,6 +619,10 @@ func parseLineSequences(seqLine string) []styleChange {
 		}
 		// Convert 1-indexed (editor format) to 0-indexed (internal)
 		position--
+		if position <= lastPosition {
+			return nil, fmt.Errorf("sequence positions must be strictly increasing: %d <= %d", position+1, lastPosition+1)
+		}
+		lastPosition = position
 
 		// Parse styles separated by commas
 		stylesStr := strings.TrimSpace(parts[1])
@@ -626,5 +644,5 @@ func parseLineSequences(seqLine string) []styleChange {
 		}
 	}
 
-	return styles
+	return styles, nil
 }

@@ -365,7 +365,10 @@ func TestConvertNeotexToANSI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ConvertNeotexToANSI(tt.textLines, tt.seqLines)
+			result, err := ConvertNeotexToANSI(tt.textLines, tt.seqLines)
+			if err != nil {
+				t.Fatalf("ConvertNeotexToANSI failed: %v", err)
+			}
 			resultStr := string(result)
 			for _, s := range tt.contains {
 				if !contains(resultStr, s) {
@@ -445,9 +448,10 @@ func TestTokenizerGetStats(t *testing.T) {
 
 func TestParseLineSequences(t *testing.T) {
 	tests := []struct {
-		name     string
-		seqLine  string
-		expected []styleChange
+		name      string
+		seqLine   string
+		expected  []styleChange
+		expectErr bool
 	}{
 		{
 			name:     "Empty",
@@ -490,11 +494,32 @@ func TestParseLineSequences(t *testing.T) {
 				{position: 0, codes: []string{"Fr"}},
 			},
 		},
+		{
+			name:      "Non increasing positions",
+			seqLine:   "5:Fr; 4:Fg",
+			expected:  nil,
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate positions",
+			seqLine:   "3:Fr; 3:Fg",
+			expected:  nil,
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseLineSequences(tt.seqLine)
+			result, err := parseLineSequences(tt.seqLine)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatal("Expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
 			if len(result) != len(tt.expected) {
 				t.Fatalf("Expected %d style changes, got %d", len(tt.expected), len(result))
 			}
@@ -622,6 +647,7 @@ func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 		expectedURL          string
 		expectedHyperlinkPos int
 		expectedSGRCodeCount int
+		expectErr            bool
 	}{
 		{
 			name:                 "Hyperlink ON only",
@@ -650,11 +676,30 @@ func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 			expectedHyperlinkPos: 8,
 			expectedSGRCodeCount: 1,
 		},
+		{
+			name:      "Non increasing positions",
+			seqLine:   "5:HL:<https://example.com>; 3:Hl",
+			expectErr: true,
+		},
+		{
+			name:      "Duplicate positions",
+			seqLine:   "5:Fr; 5:Hl",
+			expectErr: true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseLineSequencesWithHyperlinks(tt.seqLine)
+			result, err := parseLineSequencesWithHyperlinks(tt.seqLine)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatal("Expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
 
 			if len(result) != tt.expectedCount {
 				t.Fatalf("Expected %d style changes, got %d", tt.expectedCount, len(result))

@@ -3,6 +3,7 @@ package exporter
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/badele/splitans/internal/processor"
 	"github.com/badele/splitans/internal/types"
@@ -340,13 +341,15 @@ func sauceToNeotexLabels(sauce *types.Sauce) ([]string, error) {
 		}
 		labels = append(labels, label)
 	}
-	if !sauce.Date.IsZero() {
-		label, err := formatNeotexLabel("SD", sauce.Date.Format("20060102"))
-		if err != nil {
-			return nil, err
-		}
-		labels = append(labels, label)
+	date := sauce.Date
+	if date.IsZero() {
+		date = time.Now()
 	}
+	label, err := formatNeotexLabel("SD", date.Format("20060102"))
+	if err != nil {
+		return nil, err
+	}
+	labels = append(labels, label)
 	if sauce.TInfoS != "" {
 		label, err := formatNeotexLabel("SF", sauce.TInfoS)
 		if err != nil {

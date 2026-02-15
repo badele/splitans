@@ -145,6 +145,19 @@ func TestSauceToBytes_Date(t *testing.T) {
 	}
 }
 
+func TestSauceToBytes_DefaultDate(t *testing.T) {
+	sauce := NewSauce(80, 25)
+	sauce.Date = time.Time{}
+	now := time.Now()
+	bytes := sauce.ToBytes()
+	after := time.Now()
+
+	date := string(bytes[83:91])
+	if date != now.Format("20060102") && date != after.Format("20060102") {
+		t.Errorf("Date: expected today's date, got '%s'", date)
+	}
+}
+
 func TestSauceToBytes_FileSize(t *testing.T) {
 	sauce := NewSauce(80, 25)
 	sauce.FileSize = 12345

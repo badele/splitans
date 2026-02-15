@@ -206,7 +206,11 @@ func (s *Sauce) ToBytes() []byte {
 	copy(record[63:83], padRight(s.Group, 20))
 
 	// Offset 83-90: Date (8 bytes, YYYYMMDD format)
-	dateStr := s.Date.Format("20060102")
+	date := s.Date
+	if date.IsZero() {
+		date = time.Now()
+	}
+	dateStr := date.Format("20060102")
 	copy(record[83:91], dateStr)
 
 	// Offset 91-94: FileSize (4 bytes, little-endian)

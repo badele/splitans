@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/badele/splitans/internal/importer/ansi"
 	"github.com/badele/splitans/internal/processor"
@@ -190,5 +191,21 @@ func TestSauceToNeotexLabelsProtectedAndRejected(t *testing.T) {
 	badSauce := &types.Sauce{Title: "Bad<Title"}
 	if _, err := sauceToNeotexLabels(badSauce); err == nil {
 		t.Fatalf("expected error for forbidden angle bracket")
+	}
+}
+
+func TestSauceToNeotexLabelsDefaultDate(t *testing.T) {
+	sauce := &types.Sauce{}
+	now := time.Now()
+	labels, err := sauceToNeotexLabels(sauce)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	after := time.Now()
+
+	joined := strings.Join(labels, ";")
+	if !strings.Contains(joined, "!SD"+now.Format("20060102")) &&
+		!strings.Contains(joined, "!SD"+after.Format("20060102")) {
+		t.Fatalf("expected default date label, got %q", joined)
 	}
 }

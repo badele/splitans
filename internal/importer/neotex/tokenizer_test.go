@@ -3,7 +3,6 @@ package neotex
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 	"testing"
 
 	"github.com/badele/splitans/internal/exporter"
@@ -43,12 +42,43 @@ func TestSplitNeotexFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, textLines, seqLines := SplitNeotexFormat(tt.width, tt.data)
+			_, textLines, seqLines, err := SplitNeotexFormat(tt.width, tt.data)
+			if err != nil {
+				t.Fatalf("SplitNeotexFormat failed: %v", err)
+			}
 			if !reflect.DeepEqual(textLines, tt.expectedText) {
 				t.Errorf("Text lines: expected %v, got %v", tt.expectedText, textLines)
 			}
 			if !reflect.DeepEqual(seqLines, tt.expectedSeq) {
 				t.Errorf("Seq lines: expected %v, got %v", tt.expectedSeq, seqLines)
+			}
+		})
+	}
+}
+
+func TestSplitNeotexFormatRejectsInvalidLines(t *testing.T) {
+	tests := []struct {
+		name  string
+		width int
+		data  []byte
+	}{
+		{
+			name:  "Line too short",
+			width: 5,
+			data:  []byte("Hi |"),
+		},
+		{
+			name:  "Separator at wrong position",
+			width: 5,
+			data:  []byte("Hello| 1:Fr"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, _, err := SplitNeotexFormat(tt.width, tt.data)
+			if err == nil {
+				t.Fatal("Expected error, got nil")
 			}
 		})
 	}
@@ -237,10 +267,11 @@ func TestApplyNeotexCodeReset(t *testing.T) {
 }
 
 func TestExtractMetadata(t *testing.T) {
-	versionMajor, err := strconv.Atoi(exporter.NeotexVersion)
-	if err != nil {
-		t.Fatalf("invalid NeotexVersion %q: %v", exporter.NeotexVersion, err)
+	versionMajor, versionMinor, versionPatch, ok := parseNeotexVersion(exporter.NeotexVersion)
+	if !ok {
+		t.Fatalf("invalid NeotexVersion %q", exporter.NeotexVersion)
 	}
+	semverVersion := fmt.Sprintf("%d.23", versionMajor)
 
 	tests := []struct {
 		name     string
@@ -254,14 +285,16 @@ func TestExtractMetadata(t *testing.T) {
 				VersionRaw:   exporter.NeotexVersion,
 				Version:      versionMajor,
 				VersionMajor: versionMajor,
+				VersionMinor: versionMinor,
+				VersionPatch: versionPatch,
 				Extra:        make(map[string]string),
 			},
 		},
 		{
 			name:     "Semver version",
-			seqLines: []string{fmt.Sprintf("!V%s.23", exporter.NeotexVersion)},
+			seqLines: []string{fmt.Sprintf("!V%s", semverVersion)},
 			expected: NeotexMetadata{
-				VersionRaw:   fmt.Sprintf("%s.23", exporter.NeotexVersion),
+				VersionRaw:   semverVersion,
 				Version:      versionMajor,
 				VersionMajor: versionMajor,
 				VersionMinor: 23,
@@ -293,6 +326,8 @@ func TestExtractMetadata(t *testing.T) {
 				VersionRaw:   exporter.NeotexVersion,
 				Version:      versionMajor,
 				VersionMajor: versionMajor,
+				VersionMinor: versionMinor,
+				VersionPatch: versionPatch,
 				TrimmedWidth: 73,
 				Width:        80,
 				NbLines:      42,
@@ -306,6 +341,8 @@ func TestExtractMetadata(t *testing.T) {
 				VersionRaw:   exporter.NeotexVersion,
 				Version:      versionMajor,
 				VersionMajor: versionMajor,
+				VersionMinor: versionMinor,
+				VersionPatch: versionPatch,
 				Extra:        make(map[string]string),
 			},
 		},
@@ -396,7 +433,10 @@ func findSubstring(s, substr string) bool {
 func TestNewNeotexTokenizer(t *testing.T) {
 	// Test basic tokenizer creation
 	data := []byte("Hello | 1:Fr")
-	_, tokenizer := NewNeotexTokenizer(data, 5)
+	_, tokenizer, err := NewNeotexTokenizer(data, 5)
+	if err != nil {
+		t.Fatalf("NewNeotexTokenizer failed: %v", err)
+	}
 
 	if tokenizer == nil {
 		t.Fatal("NewNeotexTokenizer returned nil")
@@ -411,7 +451,10 @@ func TestNewNeotexTokenizer(t *testing.T) {
 func TestTokenizerWithMultipleStyles(t *testing.T) {
 	// Test with multiple style changes
 	data := []byte("RedGreen | 1:Fr; 4:Fg")
-	_, tokenizer := NewNeotexTokenizer(data, 8)
+	_, tokenizer, err := NewNeotexTokenizer(data, 8)
+	if err != nil {
+		t.Fatalf("NewNeotexTokenizer failed: %v", err)
+	}
 
 	tokens := tokenizer.Tokenize()
 
@@ -437,7 +480,10 @@ func TestTokenizerWithMultipleStyles(t *testing.T) {
 
 func TestTokenizerGetStats(t *testing.T) {
 	data := []byte("Hello | 1:Fr")
-	_, tokenizer := NewNeotexTokenizer(data, 5)
+	_, tokenizer, err := NewNeotexTokenizer(data, 5)
+	if err != nil {
+		t.Fatalf("NewNeotexTokenizer failed: %v", err)
+	}
 	tokenizer.Tokenize()
 
 	stats := tokenizer.GetStats()
@@ -503,6 +549,12 @@ func TestParseLineSequences(t *testing.T) {
 		{
 			name:      "Duplicate positions",
 			seqLine:   "3:Fr; 3:Fg",
+			expected:  nil,
+			expectErr: true,
+		},
+		{
+			name:      "Reject bright background",
+			seqLine:   "1:BR",
 			expected:  nil,
 			expectErr: true,
 		},
@@ -684,6 +736,16 @@ func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 		{
 			name:      "Duplicate positions",
 			seqLine:   "5:Fr; 5:Hl",
+			expectErr: true,
+		},
+		{
+			name:      "Reject bright background",
+			seqLine:   "2:BR",
+			expectErr: true,
+		},
+		{
+			name:      "Reject bright hover background",
+			seqLine:   "2:HBK",
 			expectErr: true,
 		},
 	}

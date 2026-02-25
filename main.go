@@ -153,12 +153,12 @@ func main() {
 		}
 
 	case "neotex":
-		decodedWidth, tok = splitans.NewNeotexTokenizer(data, cli.Output.Width)
-		tokens = tok.Tokenize()
+		decodedWidth, tok, err = splitans.NewNeotexTokenizer(data, cli.Output.Width)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Neotex parse error: %v\n", err)
 			os.Exit(1)
 		}
+		tokens = tok.Tokenize()
 
 	// case "neotex":
 	// 	tok = neotex.NewTokenizer(textData, seqData)

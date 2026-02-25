@@ -293,8 +293,8 @@ func NewANSITokenizerWithEncoding(input []byte, encoding string) *ANSITokenizer 
 
 // NewNeotexTokenizer creates a new tokenizer for Neotex format data.
 // The width parameter specifies the expected line width.
-// Returns the parsed width (overrides when !TWxx/yy is present) and the tokenizer.
-func NewNeotexTokenizer(data []byte, width int) (int, *NeotexTokenizer) {
+// Returns the parsed width (overrides when !TWxx/yy is present), the tokenizer, and error.
+func NewNeotexTokenizer(data []byte, width int) (int, *NeotexTokenizer, error) {
 	return neotex.NewNeotexTokenizer(data, width)
 }
 

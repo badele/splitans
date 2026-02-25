@@ -1,7 +1,9 @@
 {
   "release-type": "go",
+  "pull-request-title-pattern": "chore(${scope}): release ${component} ${version}",
   "packages": {
     ".": {
+      "component": "splitans",
       "package-name": "splitans",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
@@ -12,12 +14,12 @@
         }
       ]
     },
-    "neotex-format": {
+    "internal": {
       "release-type": "simple",
+      "component": "neotex-format",
       "package-name": "neotex-format",
-      "path": "internal",
-      "include-component-in-tag": true,
       "changelog-path": "CHANGELOG-neotex.md",
+      "include-component-in-tag": true,
       "extra-files": [
         {
           "type": "generic",

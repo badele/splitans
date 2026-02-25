@@ -307,6 +307,25 @@ type styleChangeWithHyperlink struct {
 	hoverBg         *types.ColorValue
 }
 
+func isBrightBackgroundCode(code string) bool {
+	if len(code) == 2 && code[0] == 'B' {
+		return isBrightColorLetter(code[1])
+	}
+	if len(code) == 3 && strings.HasPrefix(code, "HB") {
+		return isBrightColorLetter(code[2])
+	}
+	return false
+}
+
+func isBrightColorLetter(letter byte) bool {
+	switch letter {
+	case 'K', 'R', 'G', 'Y', 'B', 'M', 'C', 'W':
+		return true
+	default:
+		return false
+	}
+}
+
 // convertLineToANSI converts a single line of text with its sequences to ANSI
 // Takes the current SGR state and returns the updated state after processing
 func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR) (string, *types.SGR, error) {
@@ -513,6 +532,9 @@ func parseLineSequencesWithHyperlinks(seqLine string) ([]styleChangeWithHyperlin
 			if style == "" {
 				continue
 			}
+			if isBrightBackgroundCode(style) {
+				return nil, fmt.Errorf("bright background colors are not supported in neotex: %s", style)
+			}
 
 			// Check if it's a hyperlink code
 			if h, isHyperlink := ApplyNeotexHyperlinkCode(style); isHyperlink {
@@ -632,6 +654,9 @@ func parseLineSequences(seqLine string) ([]styleChange, error) {
 		for _, style := range styleList {
 			style = strings.TrimSpace(style)
 			if style != "" {
+				if isBrightBackgroundCode(style) {
+					return nil, fmt.Errorf("bright background colors are not supported in neotex: %s", style)
+				}
 				codes = append(codes, style)
 			}
 		}

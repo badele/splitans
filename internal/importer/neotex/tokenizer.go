@@ -270,8 +270,11 @@ func ApplyNeotexCode(code string, sgr *types.SGR) {
 	}
 }
 
-func NewNeotexTokenizer(data []byte, width int) (parsedWidth int, tokenizer *Tokenizer) {
-	parsedWidth, textLines, seqLines := SplitNeotexFormat(width, data)
+func NewNeotexTokenizer(data []byte, width int) (parsedWidth int, tokenizer *Tokenizer, err error) {
+	parsedWidth, textLines, seqLines, err := SplitNeotexFormat(width, data)
+	if err != nil {
+		return parsedWidth, nil, err
+	}
 
 	return parsedWidth, &Tokenizer{
 		textLines: textLines,
@@ -284,7 +287,7 @@ func NewNeotexTokenizer(data []byte, width int) (parsedWidth int, tokenizer *Tok
 			C0Codes:      make(map[byte]int),
 			C1Codes:      make(map[string]int),
 		},
-	}
+	}, nil
 }
 
 // parseRGBHex parses a 6-character hex string (RRGGBB) and returns R, G, B values
@@ -306,10 +309,11 @@ func parseRGBHex(hexStr string) (r, g, b uint8, err error) {
 	return r, g, b, nil
 }
 
-// SplitNeotexFormat sépare les données neotex en texte et séquences
+// SplitNeotexFormat sépare les données neotex en texte et séquences.
 // Format: "texte (80 car) | séquence"
-// Retourne des tableaux de lignes pour éviter les \n embeddés
-func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []string, seqLines []string) {
+// Retourne des tableaux de lignes pour éviter les \n embeddés.
+// Renvoie une erreur si une ligne ne respecte pas la largeur ou le séparateur.
+func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []string, seqLines []string, err error) {
 	separator := " | "
 
 	lines := strings.Split(string(data), "\n")
@@ -337,21 +341,22 @@ func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []str
 	parsedWidth = width
 
 	for n, line := range lines {
+		if line == "" && n == len(lines)-1 {
+			continue
+		}
 		// Convert to runes to handle UTF-8 properly
 		runes := []rune(line)
 		sepRunes := []rune(separator)
 
 		if len(runes) < width+len(sepRunes) {
-			break
+			return parsedWidth, nil, nil, fmt.Errorf("invalid neotex line %d: expected at least %d characters for width %d and separator", n+1, width+len(sepRunes), width)
 		}
 
 		// Extract the separator at position width
 		actualSep := string(runes[width : width+len(sepRunes)])
 
 		if actualSep != separator {
-			fmt.Printf("Separator not found at position %d, found '%s' instead of '%s' at %d \n",
-				width, actualSep, separator, n)
-			os.Exit(1)
+			return parsedWidth, nil, nil, fmt.Errorf("invalid neotex line %d: expected separator %q at column %d", n+1, separator, width+1)
 		}
 
 		// Extract text and sequence using rune positions
@@ -361,7 +366,7 @@ func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []str
 		seqLines = append(seqLines, seq)
 	}
 
-	return parsedWidth, textLines, seqLines
+	return parsedWidth, textLines, seqLines, nil
 }
 
 func (t *Tokenizer) Tokenize() []types.Token {

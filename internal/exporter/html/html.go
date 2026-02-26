@@ -235,7 +235,7 @@ const baseJS = `  const palette = [
   const toHex = (v) => v.toString(16).padStart(2, '0').toUpperCase();
   const rgbToHex = (rgb) => toHex(rgb[0]) + toHex(rgb[1]) + toHex(rgb[2]);
 
-  const applyCode = (code, state) => {
+  const applyCode = (code, state, paletteMap) => {
     if (code === 'R0') {
       const next = defaultState();
       Object.assign(state, next);
@@ -265,6 +265,16 @@ const baseJS = `  const palette = [
       else state.bg = { type: 'rgb', r: rgb[0], g: rgb[1], b: rgb[2] };
       return;
     }
+    if (/^[FB]P\d+$/.test(code)) {
+      const idx = parseInt(code.slice(2), 10);
+      if (!paletteMap || !paletteMap.has(idx)) {
+        throw new Error('Undefined palette index ' + idx);
+      }
+      const rgb = paletteMap.get(idx);
+      if (code[0] === 'F') state.fg = { type: 'rgb', r: rgb[0], g: rgb[1], b: rgb[2] };
+      else state.bg = { type: 'rgb', r: rgb[0], g: rgb[1], b: rgb[2] };
+      return;
+    }
     if (/^[FB]\d{1,3}$/.test(code)) {
       const value = parseInt(code.slice(1), 10);
       if (Number.isNaN(value)) return;
@@ -274,7 +284,7 @@ const baseJS = `  const palette = [
     }
   };
 
-  const parseHoverColor = (code) => {
+  const parseHoverColor = (code, paletteMap) => {
     // HF / HB standard (HFk, HFr...), RGB (HFRRGGBB/HBRRGGBB), indexed (HF123)
     if (!code || code.length < 2) return null;
     const kind = code.slice(0, 2);
@@ -302,6 +312,21 @@ const baseJS = `  const palette = [
       };
     }
 
+    if (/^P\d+$/.test(body)) {
+      const idx = parseInt(body.slice(1), 10);
+      if (!paletteMap || !paletteMap.has(idx)) {
+        throw new Error('Undefined palette index ' + idx);
+      }
+      const rgb = paletteMap.get(idx);
+      return {
+        type: 'rgb',
+        r: rgb[0],
+        g: rgb[1],
+        b: rgb[2],
+        target: isFg ? 'fg' : 'bg',
+      };
+    }
+
     if (/^\d{1,3}$/.test(body)) {
       const value = parseInt(body, 10);
       if (value >= 0 && value <= 255) {
@@ -311,7 +336,7 @@ const baseJS = `  const palette = [
     return null;
   };
 
-  const parseSequences = (seqLine) => {
+  const parseSequences = (seqLine, paletteMap) => {
     const styles = [];
     if (!seqLine) return styles;
     for (const raw of seqLine.split(';')) {
@@ -329,7 +354,7 @@ const baseJS = `  const palette = [
           style.hyperlink = { url: code.slice(4, -1) };
           continue;
         }
-        const hover = parseHoverColor(code);
+        const hover = parseHoverColor(code, paletteMap);
         if (hover) {
           if (hover.target === 'fg') style.hoverFg = hover;
           else style.hoverBg = hover;
@@ -344,21 +369,60 @@ const baseJS = `  const palette = [
   };
 
   const extractWidth = (raw, normalized) => {
-    const globalMatch = raw.match(/!TW(\d+)/);
+    const globalMatch = raw.match(/!TW=?(\d+)/);
     if (globalMatch) return parseInt(globalMatch[1], 10);
     for (let i = 0; i < normalized.length; i += 1) {
       const line = normalized[i];
       const idx = line.indexOf(' | ');
       if (idx < 0) continue;
       const seq = line.slice(idx + 3);
-      const match = seq.match(/!TW(\d+)/);
+      const match = seq.match(/!TW=?(\d+)/);
       if (match) return parseInt(match[1], 10);
     }
     return null;
   };
 
+  const parsePaletteEntry = (entry, paletteMap) => {
+    if (!entry.startsWith('!P')) return;
+    const body = entry.slice(2).trim();
+    const eqIndex = body.indexOf('=');
+    if (eqIndex < 0) {
+      throw new Error('Invalid palette entry (missing =): ' + entry);
+    }
+    const idxStr = body.slice(0, eqIndex).trim();
+    if (!/^\d+$/.test(idxStr)) {
+      throw new Error('Invalid palette index: ' + idxStr);
+    }
+    let value = body.slice(eqIndex + 1).trim();
+    if (value.startsWith('<')) {
+      if (!value.endsWith('>')) {
+        throw new Error('Invalid palette entry (missing >): ' + entry);
+      }
+      value = value.slice(1, -1);
+    }
+    if (!/^[0-9A-Fa-f]{6}$/.test(value)) {
+      throw new Error('Invalid palette value: ' + value);
+    }
+    const rgb = [
+      parseInt(value.slice(0, 2), 16),
+      parseInt(value.slice(2, 4), 16),
+      parseInt(value.slice(4, 6), 16),
+    ];
+    paletteMap.set(parseInt(idxStr, 10), rgb);
+  };
+
+  const collectPaletteEntries = (seqPart, paletteMap) => {
+    if (!seqPart) return;
+    for (const raw of seqPart.split(';')) {
+      const entry = raw.trim();
+      if (!entry || !entry.startsWith('!P')) continue;
+      parsePaletteEntry(entry, paletteMap);
+    }
+  };
+
   const parseNeotex = (raw) => {
     const lines = [];
+    const paletteMap = new Map();
     const normalized = raw.replace(/\r\n?/g, '\n').split('\n');
     const width = extractWidth(raw, normalized);
     let seenTW = false;
@@ -370,6 +434,7 @@ const baseJS = `  const palette = [
       const sepIndex = line.lastIndexOf(' | ');
       if (sepIndex < 0) continue;
       const seqPart = line.slice(sepIndex + 3);
+      collectPaletteEntries(seqPart, paletteMap);
       if (!seenTW) {
         if (!seqPart.includes('!TW')) continue;
         seenTW = true;
@@ -396,13 +461,13 @@ const baseJS = `  const palette = [
 
       lines.push({ text: line.slice(0, sepIndex), seq: seqPart });
     }
-    return lines;
+    return { lines, palette: paletteMap };
   };
 
   let showSource = false;
 
-  const renderLine = (text, seqLine, state, hyperlink, hoverFgState, hoverBgState) => {
-    const styles = parseSequences(seqLine);
+  const renderLine = (text, seqLine, state, hyperlink, hoverFgState, hoverBgState, paletteMap) => {
+    const styles = parseSequences(seqLine, paletteMap);
     const result = [];
     const runes = Array.from(text);
     let cursor = 0;
@@ -422,7 +487,7 @@ const baseJS = `  const palette = [
       const pos = Math.min(change.position, runes.length);
       pushRun(pos);
       const nextState = cloneState(current);
-      for (const code of change.codes) applyCode(code, nextState);
+      for (const code of change.codes) applyCode(code, nextState, paletteMap);
       current = nextState;
 
       if (change.hoverFg) currentHoverFg = change.hoverFg;
@@ -448,7 +513,7 @@ const baseJS = `  const palette = [
       target.textContent = source.textContent || '';
       return;
     }
-    const lines = parseNeotex(source.textContent || '');
+    const { lines, palette: paletteMap } = parseNeotex(source.textContent || '');
     let state = defaultState();
     let hyperlink = null;
     let hoverFg = null;
@@ -457,7 +522,7 @@ const baseJS = `  const palette = [
 
     for (let i = 0; i < lines.length; i += 1) {
       const { text, seq } = lines[i];
-      const { segments, state: nextState, hyperlink: nextLink, hoverFg: nextHoverFg, hoverBg: nextHoverBg } = renderLine(text, seq, state, hyperlink, hoverFg, hoverBg);
+      const { segments, state: nextState, hyperlink: nextLink, hoverFg: nextHoverFg, hoverBg: nextHoverBg } = renderLine(text, seq, state, hyperlink, hoverFg, hoverBg, paletteMap);
       for (const part of segments) {
         const el = part.hyperlink ? document.createElement('a') : document.createElement('span');
         el.textContent = part.text;

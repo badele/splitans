@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/badele/splitans/compare/v0.7.0...v0.8.0) (2026-02-26)
+
+
+### Features
+
+* add neotex logo ([#35](https://github.com/badele/splitans/issues/35)) ([ee0eb51](https://github.com/badele/splitans/commit/ee0eb5182fad2d6a2b8ddad5b87cb6b3a49ea701))
+
 ## [0.7.0](https://github.com/badele/splitans/compare/v0.6.0...v0.7.0) (2026-02-26)
 
 

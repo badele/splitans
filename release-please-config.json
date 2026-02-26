@@ -1,6 +1,5 @@
 {
   "release-type": "go",
-  "pull-request-title-pattern": "chore(${scope}): release ${component} ${version}",
   "packages": {
     ".": {
       "component": "splitans",

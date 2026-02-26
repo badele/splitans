@@ -350,7 +350,10 @@ func TestExtractMetadata(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			meta := ExtractMetadata(tt.seqLines)
+			meta, err := ExtractMetadata(tt.seqLines)
+			if err != nil {
+				t.Fatalf("ExtractMetadata failed: %v", err)
+			}
 			if meta.VersionRaw != tt.expected.VersionRaw {
 				t.Errorf("VersionRaw: expected %q, got %q", tt.expected.VersionRaw, meta.VersionRaw)
 			}
@@ -379,6 +382,29 @@ func TestExtractMetadata(t *testing.T) {
 	}
 }
 
+func TestExtractMetadataPalette(t *testing.T) {
+	seqLines := []string{"!P2=FF0080; 1:Fr"}
+	meta, err := ExtractMetadata(seqLines)
+	if err != nil {
+		t.Fatalf("ExtractMetadata failed: %v", err)
+	}
+	color, ok := meta.Palette[2]
+	if !ok {
+		t.Fatalf("expected palette index 2 to be parsed")
+	}
+	if color.R != 0xFF || color.G != 0x00 || color.B != 0x80 {
+		t.Fatalf("unexpected palette color: %d %d %d", color.R, color.G, color.B)
+	}
+}
+
+func TestExtractMetadataPaletteInvalidEntry(t *testing.T) {
+	seqLines := []string{"!P2<FF0080>; 1:Fr"}
+	_, err := ExtractMetadata(seqLines)
+	if err == nil {
+		t.Fatal("expected invalid palette entry to return error")
+	}
+}
+
 func TestConvertNeotexToANSI(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -402,7 +428,11 @@ func TestConvertNeotexToANSI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := ConvertNeotexToANSI(tt.textLines, tt.seqLines)
+			meta, err := ExtractMetadata(tt.seqLines)
+			if err != nil {
+				t.Fatalf("ExtractMetadata failed: %v", err)
+			}
+			result, err := ConvertNeotexToANSI(tt.textLines, tt.seqLines, meta.Palette)
 			if err != nil {
 				t.Fatalf("ConvertNeotexToANSI failed: %v", err)
 			}
@@ -562,7 +592,7 @@ func TestParseLineSequences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseLineSequences(tt.seqLine)
+			result, err := parseLineSequences(tt.seqLine, map[int]types.ColorValue{})
 			if tt.expectErr {
 				if err == nil {
 					t.Fatal("Expected error, got nil")
@@ -584,6 +614,27 @@ func TestParseLineSequences(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestParseLineSequencesPalette(t *testing.T) {
+	palette := map[int]types.ColorValue{
+		2: {Type: types.ColorRGB, R: 0xFF, G: 0x00, B: 0x80},
+	}
+	result, err := parseLineSequences("1:FP2", palette)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 style change, got %d", len(result))
+	}
+	if len(result[0].codes) != 1 || result[0].codes[0] != "FFF0080" {
+		t.Fatalf("Unexpected palette conversion: %v", result[0].codes)
+	}
+
+	_, err = parseLineSequences("1:FP9", map[int]types.ColorValue{})
+	if err == nil {
+		t.Fatal("Expected undefined palette index to return error")
 	}
 }
 
@@ -660,7 +711,10 @@ func TestApplyNeotexHyperlinkCode(t *testing.T) {
 
 func TestExtractMetadataSauceShortAndProtected(t *testing.T) {
 	seqLines := []string{"!ST<Hello;World>; !SAJane; !SG<ACME, Inc.>; 1:Fr"}
-	meta := ExtractMetadata(seqLines)
+	meta, err := ExtractMetadata(seqLines)
+	if err != nil {
+		t.Fatalf("ExtractMetadata failed: %v", err)
+	}
 	if meta.Sauce == nil {
 		t.Fatalf("expected SAUCE metadata to be parsed")
 	}
@@ -677,7 +731,10 @@ func TestExtractMetadataSauceShortAndProtected(t *testing.T) {
 
 func TestExtractMetadataRejectsAngleBrackets(t *testing.T) {
 	seqLines := []string{"!STBad>Title; !SAJane"}
-	meta := ExtractMetadata(seqLines)
+	meta, err := ExtractMetadata(seqLines)
+	if err != nil {
+		t.Fatalf("ExtractMetadata failed: %v", err)
+	}
 	if meta.Sauce == nil {
 		t.Fatalf("expected SAUCE metadata to be parsed")
 	}
@@ -752,7 +809,7 @@ func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseLineSequencesWithHyperlinks(tt.seqLine)
+			result, err := parseLineSequencesWithHyperlinks(tt.seqLine, map[int]types.ColorValue{})
 			if tt.expectErr {
 				if err == nil {
 					t.Fatal("Expected error, got nil")

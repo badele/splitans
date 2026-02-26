@@ -371,10 +371,14 @@ func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []str
 
 func (t *Tokenizer) Tokenize() []types.Token {
 	// Extract metadata including SAUCE from sequence lines
-	meta := ExtractMetadata(t.seqLines)
+	meta, err := ExtractMetadata(t.seqLines)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing neotex metadata: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Convert neotex format to ANSI format (for base tokens)
-	ansiData, err := ConvertNeotexToANSI(t.textLines, t.seqLines)
+	ansiData, err := ConvertNeotexToANSI(t.textLines, t.seqLines, meta.Palette)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing neotex: %v\n", err)
 		os.Exit(1)
@@ -389,7 +393,7 @@ func (t *Tokenizer) Tokenize() []types.Token {
 	t.Tokens = append([]types.Token{}, ansiTokens...)
 
 	// Append hover tokens parsed directly from neotex sequences
-	t.appendHoverTokens()
+	t.appendHoverTokens(meta.Palette)
 
 	// If SAUCE metadata was found, add a TokenSauce token
 	if meta.Sauce != nil {
@@ -448,7 +452,7 @@ func (t *Tokenizer) calculateStats() {
 
 // appendHoverTokens parses HF/HB codes from seqLines and appends TokenHoverFg/TokenHoverBg tokens.
 // Positions are derived from line offsets so that ordering matches the original text stream.
-func (t *Tokenizer) appendHoverTokens() {
+func (t *Tokenizer) appendHoverTokens(palette map[int]types.ColorValue) {
 	hoverTokens := make([]types.Token, 0)
 	offset := 0
 
@@ -472,6 +476,23 @@ func (t *Tokenizer) appendHoverTokens() {
 			for _, style := range styleList {
 				style = strings.TrimSpace(style)
 				if style == "" {
+					continue
+				}
+				if strings.HasPrefix(style, "HFP") || strings.HasPrefix(style, "HBP") {
+					idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "HFP"), "HBP")
+					idx, err := strconv.Atoi(idxStr)
+					if err != nil || idx < 0 {
+						continue
+					}
+					color, ok := palette[idx]
+					if !ok {
+						continue
+					}
+					if strings.HasPrefix(style, "HFP") {
+						hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
+					} else {
+						hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
+					}
 					continue
 				}
 				if strings.HasPrefix(style, "HF") {

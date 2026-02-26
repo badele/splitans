@@ -26,6 +26,7 @@ type NeotexMetadata struct {
 	NbLines      int               // Number of lines with content (!NL<n>)
 	Extra        map[string]string // Other metadata (!key:value)
 	Sauce        *types.Sauce      // SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
+	Palette      map[int]types.ColorValue
 }
 
 func validateNeotexLabelValue(key, value string) error {
@@ -43,6 +44,9 @@ func parseNeotexLabel(token, key string) (string, bool, error) {
 	}
 
 	rest := token[len(prefix):]
+	if strings.HasPrefix(rest, "=") {
+		rest = rest[1:]
+	}
 	if rest == "" {
 		return "", true, nil
 	}
@@ -79,6 +83,7 @@ func parseProtectedMetadata(token string) (string, string, bool, error) {
 		return "", "", true, fmt.Errorf("neotex metadata %s missing closing bracket", body[:idx])
 	}
 	key := body[:idx]
+	key = strings.TrimSuffix(key, "=")
 	value := body[idx+1 : len(body)-1]
 	if err := validateNeotexLabelValue(key, value); err != nil {
 		return "", "", true, err
@@ -86,13 +91,54 @@ func parseProtectedMetadata(token string) (string, string, bool, error) {
 	return key, value, true, nil
 }
 
+func parsePaletteEntry(token string) (int, types.ColorValue, bool, error) {
+	if !strings.HasPrefix(token, "!P") {
+		return 0, types.ColorValue{}, false, nil
+	}
+	body := token[2:]
+	if body == "" {
+		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry missing index")
+	}
+	parts := strings.SplitN(body, "=", 2)
+	if len(parts) != 2 {
+		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry missing '='")
+	}
+	idxStr := strings.TrimSpace(parts[0])
+	if idxStr == "" {
+		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry missing index")
+	}
+	idx, err := strconv.Atoi(idxStr)
+	if err != nil || idx < 0 {
+		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry invalid index: %s", idxStr)
+	}
+	value := strings.TrimSpace(parts[1])
+	if strings.HasPrefix(value, "<") {
+		if !strings.HasSuffix(value, ">") {
+			return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry missing closing bracket")
+		}
+		value = value[1 : len(value)-1]
+	}
+	if strings.ContainsAny(value, "<>") {
+		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry has invalid brackets")
+	}
+	if len(value) != 6 {
+		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry must be 6 hex digits")
+	}
+	r, g, b, err := parseRGBHex(value)
+	if err != nil {
+		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry invalid hex")
+	}
+	return idx, types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}, true, nil
+}
+
 // ExtractMetadata extracts metadata from sequence lines
 // Metadata entries start with '!' (e.g., !V1 for version)
 // Also extracts SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
-func ExtractMetadata(seqLines []string) NeotexMetadata {
+func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 	meta := NeotexMetadata{
 		Version: 0, // 0 means no version found (legacy format)
 		Extra:   make(map[string]string),
+		Palette: make(map[int]types.ColorValue),
 	}
 
 	// Collect all tokens for SAUCE parsing
@@ -108,6 +154,14 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 
 			// Collect token for SAUCE parsing (with '!' prefix)
 			allTokens = append(allTokens, entry)
+
+			if idx, color, ok, err := parsePaletteEntry(entry); ok {
+				if err != nil {
+					return meta, err
+				}
+				meta.Palette[idx] = color
+				continue
+			}
 
 			// Remove '!' prefix for other metadata
 			entryWithoutPrefix := entry[1:]
@@ -183,7 +237,7 @@ func ExtractMetadata(seqLines []string) NeotexMetadata {
 		}
 	}
 
-	return meta
+	return meta, nil
 }
 
 // parseSauceLabels extracts SAUCE metadata from neotex labels.
@@ -264,7 +318,7 @@ func parseSauceLabels(tokens []string) *types.Sauce {
 // This allows reusing the existing ANSI tokenizer instead of duplicating parsing logic
 // Tracks SGR state across lines for proper differential encoding
 // Takes arrays of lines (without embedded \n) for cleaner processing
-func ConvertNeotexToANSI(textLines []string, seqLines []string) ([]byte, error) {
+func ConvertNeotexToANSI(textLines []string, seqLines []string, palette map[int]types.ColorValue) ([]byte, error) {
 	var result bytes.Buffer
 	currentSGR := types.NewSGR() // Track SGR state across lines
 
@@ -274,7 +328,7 @@ func ConvertNeotexToANSI(textLines []string, seqLines []string) ([]byte, error) 
 			seqLine = seqLines[i]
 		}
 
-		ansiLine, newSGR, err := convertLineToANSI(textLine, seqLine, currentSGR)
+		ansiLine, newSGR, err := convertLineToANSI(textLine, seqLine, currentSGR, palette)
 		if err != nil {
 			return nil, fmt.Errorf("neotex line %d: %w", i+1, err)
 		}
@@ -328,18 +382,18 @@ func isBrightColorLetter(letter byte) bool {
 
 // convertLineToANSI converts a single line of text with its sequences to ANSI
 // Takes the current SGR state and returns the updated state after processing
-func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR) (string, *types.SGR, error) {
-	return convertLineToANSIWithHyperlink(textLine, seqLine, currentSGR, nil)
+func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR, palette map[int]types.ColorValue) (string, *types.SGR, error) {
+	return convertLineToANSIWithHyperlink(textLine, seqLine, currentSGR, nil, palette)
 }
 
 // convertLineToANSIWithHyperlink converts a single line of text with its sequences to ANSI
 // Takes the current SGR and Hyperlink state and returns the updated states after processing
-func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR *types.SGR, currentHyperlink *types.Hyperlink) (string, *types.SGR, error) {
+func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR *types.SGR, currentHyperlink *types.Hyperlink, palette map[int]types.ColorValue) (string, *types.SGR, error) {
 	if seqLine == "" {
 		return textLine, currentSGR, nil
 	}
 
-	styles, err := parseLineSequencesWithHyperlinks(seqLine)
+	styles, err := parseLineSequencesWithHyperlinks(seqLine, palette)
 	if err != nil {
 		return "", currentSGR, err
 	}
@@ -424,7 +478,7 @@ func hyperlinkToOSC8(h *types.Hyperlink) string {
 // parseLineSequencesWithHyperlinks parses sequences for a single line, including hyperlinks.
 // Returns a slice of styleChangeWithHyperlink in the order they appear.
 // Metadata entries starting with '!' are ignored (e.g., !V1 for version)
-func parseLineSequencesWithHyperlinks(seqLine string) ([]styleChangeWithHyperlink, error) {
+func parseLineSequencesWithHyperlinks(seqLine string, palette map[int]types.ColorValue) ([]styleChangeWithHyperlink, error) {
 	var styles []styleChangeWithHyperlink
 	if seqLine == "" {
 		return styles, nil
@@ -535,6 +589,41 @@ func parseLineSequencesWithHyperlinks(seqLine string) ([]styleChangeWithHyperlin
 			if isBrightBackgroundCode(style) {
 				return nil, fmt.Errorf("bright background colors are not supported in neotex: %s", style)
 			}
+			if strings.HasPrefix(style, "HFP") || strings.HasPrefix(style, "HBP") {
+				isFg := strings.HasPrefix(style, "HFP")
+				idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "HFP"), "HBP")
+				idx, err := strconv.Atoi(idxStr)
+				if err != nil || idx < 0 {
+					return nil, fmt.Errorf("invalid palette index %q", idxStr)
+				}
+				color, ok := palette[idx]
+				if !ok {
+					return nil, fmt.Errorf("undefined palette index %d", idx)
+				}
+				if isFg {
+					hoverFg = &color
+				} else {
+					hoverBg = &color
+				}
+				continue
+			}
+			if strings.HasPrefix(style, "FP") || strings.HasPrefix(style, "BP") {
+				idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "FP"), "BP")
+				idx, err := strconv.Atoi(idxStr)
+				if err != nil || idx < 0 {
+					return nil, fmt.Errorf("invalid palette index %q", idxStr)
+				}
+				color, ok := palette[idx]
+				if !ok {
+					return nil, fmt.Errorf("undefined palette index %d", idx)
+				}
+				prefix := "F"
+				if strings.HasPrefix(style, "BP") {
+					prefix = "B"
+				}
+				codes = append(codes, fmt.Sprintf("%s%02X%02X%02X", prefix, color.R, color.G, color.B))
+				continue
+			}
 
 			// Check if it's a hyperlink code
 			if h, isHyperlink := ApplyNeotexHyperlinkCode(style); isHyperlink {
@@ -607,7 +696,7 @@ func parseNeotexVersion(raw string) (int, int, int, bool) {
 // parseLineSequences parses sequences for a single line
 // Returns a slice of styleChange in the order they appear (already sorted)
 // Metadata entries starting with '!' are ignored (e.g., !V1 for version)
-func parseLineSequences(seqLine string) ([]styleChange, error) {
+func parseLineSequences(seqLine string, palette map[int]types.ColorValue) ([]styleChange, error) {
 	var styles []styleChange
 	if seqLine == "" {
 		return styles, nil
@@ -656,6 +745,23 @@ func parseLineSequences(seqLine string) ([]styleChange, error) {
 			if style != "" {
 				if isBrightBackgroundCode(style) {
 					return nil, fmt.Errorf("bright background colors are not supported in neotex: %s", style)
+				}
+				if strings.HasPrefix(style, "FP") || strings.HasPrefix(style, "BP") {
+					idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "FP"), "BP")
+					idx, err := strconv.Atoi(idxStr)
+					if err != nil || idx < 0 {
+						return nil, fmt.Errorf("invalid palette index %q", idxStr)
+					}
+					color, ok := palette[idx]
+					if !ok {
+						return nil, fmt.Errorf("undefined palette index %d", idx)
+					}
+					prefix := "F"
+					if strings.HasPrefix(style, "BP") {
+						prefix = "B"
+					}
+					codes = append(codes, fmt.Sprintf("%s%02X%02X%02X", prefix, color.R, color.G, color.B))
+					continue
 				}
 				codes = append(codes, style)
 			}

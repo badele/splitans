@@ -1,4 +1,4 @@
-![logo](./logo.png)
+![logo](./docs/logo.png)
 
 Splitans is a tokenization tool that parses ANSI files and separates ANSI
 sequences from text. You can save the stdout output to a file with the `.neo`

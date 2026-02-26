@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.7.0](https://github.com/badele/splitans/compare/v0.6.0...v0.7.0) (2026-02-26)
+
+
+### Features
+
+* add palette support ([#32](https://github.com/badele/splitans/issues/32)) ([6ad51f9](https://github.com/badele/splitans/commit/6ad51f915c4a908b36c8e4a2e0399c5ad4f7b885))
+* define default SAUCE date ([#29](https://github.com/badele/splitans/issues/29)) ([b1b74b9](https://github.com/badele/splitans/commit/b1b74b987a0a124beeec1a75f2131dc33aa1bdd4))
+* update rising error ([#30](https://github.com/badele/splitans/issues/30)) ([9d81a11](https://github.com/badele/splitans/commit/9d81a116683315e79e502fba3dc046145b669aa8))
+
+
+### Bug Fixes
+
+* release please ([#34](https://github.com/badele/splitans/issues/34)) ([edbf246](https://github.com/badele/splitans/commit/edbf246b4ac797e81ceffc960636860b3e7104aa))
+* release please components ([#31](https://github.com/badele/splitans/issues/31)) ([0d3f3f9](https://github.com/badele/splitans/commit/0d3f3f9183bfef34120f76cad5bfa72c64ea7522))
+
 ## [0.6.0](https://github.com/badele/splitans/compare/v0.5.0...v0.6.0) (2026-02-14)
 
 

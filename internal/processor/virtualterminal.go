@@ -24,6 +24,7 @@ type VirtualTerminal struct {
 	savedCursorY     int
 	outputEncoding   string
 	useVGAColors     bool
+	legacyMode       bool
 	debugCursor      bool
 	debugSGR         bool
 	lastWrapped      bool
@@ -46,7 +47,7 @@ type ContentBounds struct {
 // EXPORTED
 // ============================================================================
 
-func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors bool) *VirtualTerminal {
+func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors bool, legacyMode bool) *VirtualTerminal {
 	defaultSGR := types.NewSGR()
 	buffer := make([][]types.Cell, height)
 	for i := range buffer {
@@ -65,6 +66,7 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 		currentSGR:     defaultSGR,
 		outputEncoding: outputEncoding,
 		useVGAColors:   useVGAColors,
+		legacyMode:     legacyMode,
 		debugCursor:    false,
 		debugSGR:       false,
 		lastWrapped:    false,
@@ -132,6 +134,7 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 	result := []types.LineWithSequences{}
 	var currentSGR *types.SGR = nil
 	var currentHyperlink *types.Hyperlink = nil
+	defaultSGR := types.NewSGR()
 
 	maxCursorY := 0
 	for y := 0; y < vt.height; y++ {
@@ -189,12 +192,16 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 					currentHyperlink = hyperlinkCopy
 				}
 			} else {
-				// Trailing area: emit a single SGR change if different, but keep currentSGR to preserve cross-line state
+				// Trailing area: emit a single SGR change if different.
+				// Keep currentSGR unless we emit a default reset at the first trailing column.
 				if !emittedTrailingChange && !cell.SGR.Equals(currentSGR) {
 					line.Sequences = append(line.Sequences, types.SGRSequence{
 						Position: x,
 						SGR:      cell.SGR.Copy(),
 					})
+					if x == rowMaxX+1 && cell.SGR.Equals(defaultSGR) {
+						currentSGR = cell.SGR.Copy()
+					}
 					emittedTrailingChange = true
 				}
 			}
@@ -282,15 +289,15 @@ func (vt *VirtualTerminal) GetContentBounds() ContentBounds {
 
 // NewVirtualTerminalFromCells creates a VirtualTerminal from a cell buffer.
 // Useful for reconstructing a VT after cropping or manipulation.
-func NewVirtualTerminalFromCells(cells [][]types.Cell, outputEncoding string, useVGAColors bool) *VirtualTerminal {
+func NewVirtualTerminalFromCells(cells [][]types.Cell, outputEncoding string, useVGAColors bool, legacyMode bool) *VirtualTerminal {
 	if len(cells) == 0 {
-		return NewVirtualTerminal(0, 0, outputEncoding, useVGAColors)
+		return NewVirtualTerminal(0, 0, outputEncoding, useVGAColors, legacyMode)
 	}
 
 	height := len(cells)
 	width := len(cells[0])
 
-	vt := NewVirtualTerminal(width, height, outputEncoding, useVGAColors)
+	vt := NewVirtualTerminal(width, height, outputEncoding, useVGAColors, legacyMode)
 
 	for y := 0; y < height; y++ {
 		for x := 0; x < width && x < len(cells[y]); x++ {
@@ -330,7 +337,7 @@ func (vt *VirtualTerminal) Crop(x, y, width, height int) *VirtualTerminal {
 		}
 	}
 
-	return NewVirtualTerminalFromCells(cells, vt.outputEncoding, vt.useVGAColors)
+	return NewVirtualTerminalFromCells(cells, vt.outputEncoding, vt.useVGAColors, vt.legacyMode)
 }
 
 // Paste copies the content of source into the current VT at position (x, y).
@@ -818,8 +825,8 @@ func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
 			if seqIndex < len(line.Sequences) && line.Sequences[seqIndex].Position == i {
 				newSGR := line.Sequences[seqIndex].SGR
 
-				// Generate differential ANSI sequence (legacyMode=true for ANSI 1990 compatibility)
-				diffSequence := newSGR.DiffToANSI(currentSGR, vt.useVGAColors, true)
+				// Generate differential ANSI sequence (legacyMode controls ANSI 1990 compatibility)
+				diffSequence := newSGR.DiffToANSI(currentSGR, vt.useVGAColors, vt.legacyMode)
 				if diffSequence != "" {
 					lineBuilder.WriteString(diffSequence)
 				}

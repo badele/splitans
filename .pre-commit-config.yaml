@@ -10,6 +10,19 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: neotex-rebuild
+        name: Rebuild neotex 16colors
+        entry: nix develop -c sh
+        args:
+          - -c
+          - >
+            just go-install
+            neotex-all-from-ansi 16colors/1990/1990
+            neotex-count-errors 16colors/1990/1990
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
       - id: go-mod-tidy
         name: Check go.mod is tidy
         entry: nix develop -c sh

@@ -491,6 +491,7 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 
 func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string) {
 	lines := vt.ExportSplitTextAndSequences()
+	buffer := vt.GetBuffer()
 
 	if inline {
 		lines = flattenLinesWithSequences(lines)
@@ -525,7 +526,28 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 		lineCount = 1
 	}
 
+	defaultSGR := types.NewSGR()
 	for lineIdx, line := range lines {
+		rowMaxX := -1
+		if inline {
+			textRunes := []rune(line.Text)
+			rowMaxX = len(textRunes) - 1
+		} else if lineIdx < len(buffer) {
+			for x := 0; x < len(buffer[lineIdx]); x++ {
+				if buffer[lineIdx][x].Char != 0x0 {
+					rowMaxX = x
+				}
+			}
+		}
+		if rowMaxX < 0 {
+			rowMaxX = textWidth - 1
+		}
+
+		linePreviousSGR := previousSGR
+		if linePreviousSGR != nil {
+			linePreviousSGR = linePreviousSGR.Copy()
+		}
+
 		// Add text
 		textBuilder.WriteString(line.Text)
 		if lineIdx < len(lines)-1 {
@@ -562,10 +584,21 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 
 			if sgrPos >= 0 && (hyperlinkPos < 0 || sgrPos <= hyperlinkPos) {
 				pos = sgrPos
+				allowTrailingReset := pos == rowMaxX+1 && line.Sequences[sgrIdx].SGR.Equals(defaultSGR)
+				if pos > rowMaxX && !allowTrailingReset {
+					sgrIdx++
+					if hyperlinkPos == pos {
+						hyperlinkIdx++
+					}
+					continue
+				}
 				// Generate differential neotex codes for SGR
-				neotexCodes := DiffSGRToNeotex(line.Sequences[sgrIdx].SGR, previousSGR)
+				neotexCodes := DiffSGRToNeotex(line.Sequences[sgrIdx].SGR, linePreviousSGR)
 				codes = append(codes, neotexCodes...)
-				previousSGR = line.Sequences[sgrIdx].SGR.Copy()
+				linePreviousSGR = line.Sequences[sgrIdx].SGR.Copy()
+				if pos <= rowMaxX || allowTrailingReset {
+					previousSGR = line.Sequences[sgrIdx].SGR.Copy()
+				}
 				sgrIdx++
 
 				// Check if there's also a hyperlink change at the same position
@@ -583,6 +616,11 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 				}
 			} else if hyperlinkPos >= 0 {
 				pos = hyperlinkPos
+				allowTrailingReset := pos == rowMaxX+1 && line.HyperlinkSequences[hyperlinkIdx].Hyperlink == nil
+				if pos > rowMaxX && !allowTrailingReset {
+					hyperlinkIdx++
+					continue
+				}
 				newHyperlink := line.HyperlinkSequences[hyperlinkIdx].Hyperlink
 				if !newHyperlink.Equals(previousHyperlink) {
 					codes = append(codes, HyperlinkToNeotex(newHyperlink))
@@ -619,7 +657,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 }
 
 func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion) (string, string, int, error) {
-	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false)
+	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false, false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", "", 0, fmt.Errorf("error applying tokens: %w", err)
@@ -651,7 +689,7 @@ func exportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, in
 		return exportFlattenedNeotex(width, nblines, tokens, inline, crop)
 	}
 
-	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false)
+	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false, false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", "", 0, fmt.Errorf("error applying tokens: %w", err)

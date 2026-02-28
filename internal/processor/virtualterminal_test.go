@@ -8,7 +8,7 @@ import (
 )
 
 func TestWriteTextDoesNotInsertExtraBlankLineOnExactWidth(t *testing.T) {
-	vt := NewVirtualTerminal(3, 10, "utf8", false)
+	vt := NewVirtualTerminal(3, 10, "utf8", false, false)
 
 	tokens := []types.Token{
 		{Type: types.TokenText, Value: "abc"},
@@ -36,10 +36,10 @@ func TestWriteTextDoesNotInsertExtraBlankLineOnExactWidth(t *testing.T) {
 
 func TestPaste_BasicCopy(t *testing.T) {
 	// Create a 10x5 workspace
-	workspace := NewVirtualTerminal(10, 5, "utf8", false)
+	workspace := NewVirtualTerminal(10, 5, "utf8", false, false)
 
 	// Create a 3x2 source with content
-	source := NewVirtualTerminal(3, 2, "utf8", false)
+	source := NewVirtualTerminal(3, 2, "utf8", false, false)
 	source.ApplyTokens([]types.Token{
 		{Type: types.TokenText, Value: "ABC"},
 		{Type: types.TokenC0, C0Code: 0x0A}, // LF
@@ -63,10 +63,10 @@ func TestPaste_BasicCopy(t *testing.T) {
 
 func TestPaste_WithOffset(t *testing.T) {
 	// Create a 10x5 workspace
-	workspace := NewVirtualTerminal(10, 5, "utf8", false)
+	workspace := NewVirtualTerminal(10, 5, "utf8", false, false)
 
 	// Create a 2x2 source
-	source := NewVirtualTerminal(2, 2, "utf8", false)
+	source := NewVirtualTerminal(2, 2, "utf8", false, false)
 	source.ApplyTokens([]types.Token{
 		{Type: types.TokenText, Value: "XY"},
 		{Type: types.TokenC0, C0Code: 0x0A},
@@ -95,10 +95,10 @@ func TestPaste_WithOffset(t *testing.T) {
 
 func TestPaste_Clipping(t *testing.T) {
 	// Create a 5x3 workspace
-	workspace := NewVirtualTerminal(5, 3, "utf8", false)
+	workspace := NewVirtualTerminal(5, 3, "utf8", false, false)
 
 	// Create a 4x4 source (larger than workspace when pasted at offset)
-	source := NewVirtualTerminal(4, 4, "utf8", false)
+	source := NewVirtualTerminal(4, 4, "utf8", false, false)
 	source.ApplyTokens([]types.Token{
 		{Type: types.TokenText, Value: "1234"},
 		{Type: types.TokenC0, C0Code: 0x0A},
@@ -127,8 +127,8 @@ func TestPaste_Clipping(t *testing.T) {
 }
 
 func TestPaste_NegativePosition(t *testing.T) {
-	workspace := NewVirtualTerminal(10, 10, "utf8", false)
-	source := NewVirtualTerminal(2, 2, "utf8", false)
+	workspace := NewVirtualTerminal(10, 10, "utf8", false, false)
+	source := NewVirtualTerminal(2, 2, "utf8", false, false)
 
 	// Test negative X
 	if err := workspace.Paste(source, -1, 0); err == nil {
@@ -147,10 +147,10 @@ func TestPaste_NegativePosition(t *testing.T) {
 }
 
 func TestPaste_PreservesStyles(t *testing.T) {
-	workspace := NewVirtualTerminal(10, 5, "utf8", false)
+	workspace := NewVirtualTerminal(10, 5, "utf8", false, false)
 
 	// Create source with colored text
-	source := NewVirtualTerminal(3, 1, "utf8", false)
+	source := NewVirtualTerminal(3, 1, "utf8", false, false)
 	source.ApplyTokens([]types.Token{
 		{Type: types.TokenSGR, Parameters: []string{"31"}}, // Red foreground
 		{Type: types.TokenText, Value: "RED"},
@@ -174,7 +174,7 @@ func TestPaste_PreservesStyles(t *testing.T) {
 
 func TestPaste_Transparency(t *testing.T) {
 	// Create a 10x3 workspace with background content
-	workspace := NewVirtualTerminal(10, 3, "utf8", false)
+	workspace := NewVirtualTerminal(10, 3, "utf8", false, false)
 	workspace.ApplyTokens([]types.Token{
 		{Type: types.TokenText, Value: "=========="},
 		{Type: types.TokenC0, C0Code: 0x0A},
@@ -185,7 +185,7 @@ func TestPaste_Transparency(t *testing.T) {
 
 	// Create a 6x1 source with partial content using cursor positioning
 	// Move cursor to column 3 (1-indexed), write "AB", leaving columns 1-2 and 5-6 as 0
-	source := NewVirtualTerminal(6, 1, "utf8", false)
+	source := NewVirtualTerminal(6, 1, "utf8", false, false)
 	source.ApplyTokens([]types.Token{
 		{Type: types.TokenCSI, Raw: "\x1b[3G", Parameters: []string{"3"}}, // CHA: move to column 3
 		{Type: types.TokenText, Value: "AB"},
@@ -318,7 +318,7 @@ func TestGetContentBounds(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			vt := NewVirtualTerminal(tt.width, tt.height, "utf8", false)
+			vt := NewVirtualTerminal(tt.width, tt.height, "utf8", false, false)
 			vt.ApplyTokens(tt.tokens)
 
 			bounds := vt.GetContentBounds()

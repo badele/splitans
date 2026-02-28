@@ -6,7 +6,7 @@ package neotex
 //
 // Colors:
 //   Foreground colors = F<color>
-//   Background colors = B<color> (NOTE: no bright variants for background colors)
+//   Background colors = B<color>
 //   <color> lowercase = normal colors / uppercase = bright colors
 //   k/K = Black, r/R = Red, g/G = Green, y/Y = Yellow
 //   b/B = Blue, m/M = Magenta, c/C = Cyan, w/W = White
@@ -52,11 +52,12 @@ import (
 )
 
 type Tokenizer struct {
-	textLines []string         // Lignes de texte (sans \n)
-	seqLines  []string         // Lignes de séquences (sans \n)
-	Tokens    []types.Token    `json:"tokens"`
-	Stats     types.TokenStats `json:"stats"`
-	pos       int
+	textLines  []string         // Lignes de texte (sans \n)
+	seqLines   []string         // Lignes de séquences (sans \n)
+	Tokens     []types.Token    `json:"tokens"`
+	Stats      types.TokenStats `json:"stats"`
+	pos        int
+	legacyMode bool
 }
 
 // parseHoverColorValue parse code (without HF/HB prefix) into ColorValue.
@@ -270,7 +271,7 @@ func ApplyNeotexCode(code string, sgr *types.SGR) {
 	}
 }
 
-func NewNeotexTokenizer(data []byte, width int) (parsedWidth int, tokenizer *Tokenizer, err error) {
+func NewNeotexTokenizer(data []byte, width int, legacyMode bool) (parsedWidth int, tokenizer *Tokenizer, err error) {
 	parsedWidth, textLines, seqLines, err := SplitNeotexFormat(width, data)
 	if err != nil {
 		return parsedWidth, nil, err
@@ -287,6 +288,7 @@ func NewNeotexTokenizer(data []byte, width int) (parsedWidth int, tokenizer *Tok
 			C0Codes:      make(map[byte]int),
 			C1Codes:      make(map[string]int),
 		},
+		legacyMode: legacyMode,
 	}, nil
 }
 
@@ -378,7 +380,7 @@ func (t *Tokenizer) Tokenize() []types.Token {
 	}
 
 	// Convert neotex format to ANSI format (for base tokens)
-	ansiData, err := ConvertNeotexToANSI(t.textLines, t.seqLines, meta.Palette)
+	ansiData, err := ConvertNeotexToANSI(t.textLines, t.seqLines, meta.Palette, t.legacyMode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing neotex: %v\n", err)
 		os.Exit(1)

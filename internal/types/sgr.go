@@ -665,7 +665,7 @@ func (s *SGR) fgColorCodesLegacy(legacyMode bool) []int {
 }
 
 // bgColorCodesLegacy returns SGR codes for background color in legacy mode
-// In legacy mode, bright colors (8-15) use bold (1) + base color (40-47)
+// In legacy mode, bright colors (8-15) use blink (5) + base color (40-47)
 func (s *SGR) bgColorCodesLegacy(legacyMode bool) []int {
 	if s.BgColor.IsDefault() {
 		return []int{49}
@@ -678,8 +678,8 @@ func (s *SGR) bgColorCodesLegacy(legacyMode bool) []int {
 		}
 		// Bright background colors (8-15)
 		if legacyMode {
-			// Legacy mode: use bold + base color (e.g., bright red bg = 1;41)
-			return []int{1, 40 + int(s.BgColor.Index) - 8}
+			// Legacy mode: use blink + base color (e.g., bright red bg = 5;41)
+			return []int{5, 40 + int(s.BgColor.Index) - 8}
 		}
 		return []int{100 + int(s.BgColor.Index) - 8}
 	case ColorIndexed:

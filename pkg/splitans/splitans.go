@@ -14,7 +14,7 @@
 //	utf8Data, _ := splitans.ConvertToUTF8(data, "cp437")
 //	tokenizer := splitans.NewANSITokenizer(utf8Data)
 //	tokens := tokenizer.Tokenize()
-//	output, _ := splitans.ExportFlattenedANSI(80, 25, tokens, "utf8", true)
+//	output, _ := splitans.ExportFlattenedANSI(80, 25, tokens, "utf8", true, false)
 package splitans
 
 import (
@@ -293,16 +293,17 @@ func NewANSITokenizerWithEncoding(input []byte, encoding string) *ANSITokenizer 
 
 // NewNeotexTokenizer creates a new tokenizer for Neotex format data.
 // The width parameter specifies the expected line width.
+// legacyMode forces ANSI 1990 compatibility when converting neotex sequences.
 // Returns the parsed width (overrides when !TWxx/yy is present), the tokenizer, and error.
-func NewNeotexTokenizer(data []byte, width int) (int, *NeotexTokenizer, error) {
-	return neotex.NewNeotexTokenizer(data, width)
+func NewNeotexTokenizer(data []byte, width int, legacyMode bool) (int, *NeotexTokenizer, error) {
+	return neotex.NewNeotexTokenizer(data, width, legacyMode)
 }
 
 // NewVirtualTerminal creates a new virtual terminal with the specified dimensions.
 // outputEncoding specifies the output encoding ("utf8", "cp437", "cp850", "iso-8859-1").
 // useVGAColors enables true VGA colors (not affected by terminal themes).
 func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors bool) *VirtualTerminal {
-	return processor.NewVirtualTerminal(width, height, outputEncoding, useVGAColors)
+	return processor.NewVirtualTerminal(width, height, outputEncoding, useVGAColors, false)
 }
 
 // NewSGR creates a new SGR with default values.
@@ -331,31 +332,35 @@ func ParseCropRegion(s string) (*CropRegion, error) {
 // ExportFlattenedANSI exports tokens to a flattened ANSI string.
 // This processes tokens through a virtual terminal to resolve cursor positioning
 // and produces clean ANSI output.
+// legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // If crop is non-nil, the output will be cropped to the specified region.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, crop)
+func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion) (string, int, error) {
+	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop)
 }
 
 // ExportFlattenedANSIInline exports tokens to a single-line ANSI string.
+// legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, crop)
+func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion) (string, int, error) {
+	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop)
 }
 
 // ExportFlattenedANSIWithSauce exports tokens to a flattened ANSI string with SAUCE metadata appended.
 // If sauce is nil, behaves identically to ExportFlattenedANSI.
+// legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // When sauce is provided, the actual content dimensions are calculated and stored in the SAUCE record.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
-	return exporter.ExportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, crop, sauce)
+func ExportFlattenedANSIWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
+	return exporter.ExportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce)
 }
 
 // ExportFlattenedANSIInlineWithSauce exports tokens to a single-line ANSI string with SAUCE metadata appended.
 // If sauce is nil, behaves identically to ExportFlattenedANSIInline.
+// legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
-	return exporter.ExportFlattenedANSIInlineWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, crop, sauce)
+func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
+	return exporter.ExportFlattenedANSIInlineWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce)
 }
 
 // ExportFlattenedText exports tokens to plain text without ANSI codes.

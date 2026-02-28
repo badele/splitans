@@ -50,7 +50,7 @@ func TestHyperlinkToNeotex(t *testing.T) {
 }
 
 func TestExportToNeotexWithHyperlinks(t *testing.T) {
-	vt := processor.NewVirtualTerminal(20, 1, "utf8", false)
+	vt := processor.NewVirtualTerminal(20, 1, "utf8", false, false)
 
 	// Create tokens with a hyperlink
 	tokens := []types.Token{
@@ -85,7 +85,7 @@ func TestHyperlinkRoundTrip(t *testing.T) {
 	tokens := tokenizer.Tokenize()
 
 	// Apply to virtual terminal
-	vt := processor.NewVirtualTerminal(20, 1, "utf8", false)
+	vt := processor.NewVirtualTerminal(20, 1, "utf8", false, false)
 	if err := vt.ApplyTokens(tokens); err != nil {
 		t.Fatalf("Failed to apply tokens: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestHyperlinkRoundTrip(t *testing.T) {
 }
 
 func TestExportToInlineNeotex(t *testing.T) {
-	vt := processor.NewVirtualTerminal(4, 4, "utf8", false)
+	vt := processor.NewVirtualTerminal(4, 4, "utf8", false, false)
 
 	tokens := []types.Token{
 		{Type: types.TokenSGR, Parameters: []string{"31"}},

@@ -21,7 +21,7 @@ func ExportFlattenedTextInline(width, nblines int, tokens []types.Token, outputE
 }
 
 func exportFlattenedText(width, nblines int, tokens []types.Token, outputEncoding string, inline bool, crop *types.CropRegion) (string, int, error) {
-	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, false)
+	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, false, false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", 0, fmt.Errorf("error applying tokens: %w", err)

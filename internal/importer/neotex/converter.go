@@ -314,11 +314,11 @@ func parseSauceLabels(tokens []string) *types.Sauce {
 	return sauce
 }
 
-// ConvertNeotexToANSI converts neotex format (text + sequences) to raw ANSI format
-// This allows reusing the existing ANSI tokenizer instead of duplicating parsing logic
-// Tracks SGR state across lines for proper differential encoding
-// Takes arrays of lines (without embedded \n) for cleaner processing
-func ConvertNeotexToANSI(textLines []string, seqLines []string, palette map[int]types.ColorValue) ([]byte, error) {
+// ConvertNeotexToANSI converts neotex format (text + sequences) to raw ANSI format.
+// This allows reusing the existing ANSI tokenizer instead of duplicating parsing logic.
+// Tracks SGR state across lines for proper differential encoding.
+// Takes arrays of lines (without embedded \n) for cleaner processing.
+func ConvertNeotexToANSI(textLines []string, seqLines []string, palette map[int]types.ColorValue, legacyMode bool) ([]byte, error) {
 	var result bytes.Buffer
 	currentSGR := types.NewSGR() // Track SGR state across lines
 
@@ -328,7 +328,7 @@ func ConvertNeotexToANSI(textLines []string, seqLines []string, palette map[int]
 			seqLine = seqLines[i]
 		}
 
-		ansiLine, newSGR, err := convertLineToANSI(textLine, seqLine, currentSGR, palette)
+		ansiLine, newSGR, err := convertLineToANSI(textLine, seqLine, currentSGR, palette, legacyMode)
 		if err != nil {
 			return nil, fmt.Errorf("neotex line %d: %w", i+1, err)
 		}
@@ -361,34 +361,15 @@ type styleChangeWithHyperlink struct {
 	hoverBg         *types.ColorValue
 }
 
-func isBrightBackgroundCode(code string) bool {
-	if len(code) == 2 && code[0] == 'B' {
-		return isBrightColorLetter(code[1])
-	}
-	if len(code) == 3 && strings.HasPrefix(code, "HB") {
-		return isBrightColorLetter(code[2])
-	}
-	return false
-}
-
-func isBrightColorLetter(letter byte) bool {
-	switch letter {
-	case 'K', 'R', 'G', 'Y', 'B', 'M', 'C', 'W':
-		return true
-	default:
-		return false
-	}
-}
-
 // convertLineToANSI converts a single line of text with its sequences to ANSI
 // Takes the current SGR state and returns the updated state after processing
-func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR, palette map[int]types.ColorValue) (string, *types.SGR, error) {
-	return convertLineToANSIWithHyperlink(textLine, seqLine, currentSGR, nil, palette)
+func convertLineToANSI(textLine string, seqLine string, currentSGR *types.SGR, palette map[int]types.ColorValue, legacyMode bool) (string, *types.SGR, error) {
+	return convertLineToANSIWithHyperlink(textLine, seqLine, currentSGR, nil, palette, legacyMode)
 }
 
 // convertLineToANSIWithHyperlink converts a single line of text with its sequences to ANSI
 // Takes the current SGR and Hyperlink state and returns the updated states after processing
-func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR *types.SGR, currentHyperlink *types.Hyperlink, palette map[int]types.ColorValue) (string, *types.SGR, error) {
+func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR *types.SGR, currentHyperlink *types.Hyperlink, palette map[int]types.ColorValue, legacyMode bool) (string, *types.SGR, error) {
 	if seqLine == "" {
 		return textLine, currentSGR, nil
 	}
@@ -419,7 +400,7 @@ func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR 
 		}
 
 		// Generate differential ANSI sequence for SGR
-		ansiSeq := newSGR.DiffToANSI(currentSGR, false, true)
+		ansiSeq := newSGR.DiffToANSI(currentSGR, false, legacyMode)
 		result.WriteString(ansiSeq)
 
 		// Handle hyperlink changes
@@ -586,9 +567,6 @@ func parseLineSequencesWithHyperlinks(seqLine string, palette map[int]types.Colo
 			if style == "" {
 				continue
 			}
-			if isBrightBackgroundCode(style) {
-				return nil, fmt.Errorf("bright background colors are not supported in neotex: %s", style)
-			}
 			if strings.HasPrefix(style, "HFP") || strings.HasPrefix(style, "HBP") {
 				isFg := strings.HasPrefix(style, "HFP")
 				idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "HFP"), "HBP")
@@ -743,9 +721,6 @@ func parseLineSequences(seqLine string, palette map[int]types.ColorValue) ([]sty
 		for _, style := range styleList {
 			style = strings.TrimSpace(style)
 			if style != "" {
-				if isBrightBackgroundCode(style) {
-					return nil, fmt.Errorf("bright background colors are not supported in neotex: %s", style)
-				}
 				if strings.HasPrefix(style, "FP") || strings.HasPrefix(style, "BP") {
 					idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "FP"), "BP")
 					idx, err := strconv.Atoi(idxStr)

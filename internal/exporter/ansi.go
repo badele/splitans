@@ -7,20 +7,20 @@ import (
 	"github.com/badele/splitans/internal/types"
 )
 
-// ExportFlattenedANSI exports tokens to flattened ANSI format
-// Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, crop *types.CropRegion) (string, int, error) {
-	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, false, crop)
+// ExportFlattenedANSI exports tokens to flattened ANSI format.
+// Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+func ExportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion) (string, int, error) {
+	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, false, crop)
 }
 
 // ExportFlattenedANSIInline flattens ANSI output on a single line.
-// Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedANSIInline(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, crop *types.CropRegion) (string, int, error) {
-	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, true, crop)
+// Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+func ExportFlattenedANSIInline(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion) (string, int, error) {
+	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, true, crop)
 }
 
-func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, inline bool, crop *types.CropRegion) (string, int, error) {
-	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, useVGAColors)
+func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, inline bool, crop *types.CropRegion) (string, int, error) {
+	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, useVGAColors, legacyMode)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", 0, fmt.Errorf("error applying tokens: %w", err)
@@ -47,19 +47,19 @@ func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncodin
 // If sauce is nil, behaves identically to ExportFlattenedANSI.
 // When dimensions are missing in the SAUCE record, content bounds are used to fill them.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
-	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, false, crop, sauce)
+func ExportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
+	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, false, crop, sauce)
 }
 
 // ExportFlattenedANSIInlineWithSauce exports tokens to single-line ANSI format with SAUCE metadata appended.
 // If sauce is nil, behaves identically to ExportFlattenedANSIInline.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
-	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, true, crop, sauce)
+func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
+	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, true, crop, sauce)
 }
 
-func exportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, inline bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
-	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, useVGAColors)
+func exportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, inline bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
+	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, useVGAColors, legacyMode)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
 		return "", 0, fmt.Errorf("error applying tokens: %w", err)

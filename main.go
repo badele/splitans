@@ -31,10 +31,11 @@ type CLI struct {
 		Oformat   string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats,html,html-pack" help:"Output format: ansi, json, neotex, plaintext, table, stats, html, html-pack"`
 		Oencoding string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
 		Width     int    `short:"W" default:"80" help:"Width text to specified width"`
-		Lines     int    `short:"L" default:"1000" help:"Nb lines text"`
+		Lines     int    `short:"N" default:"1000" help:"Nb lines text"`
 		Crop      string `short:"C" help:"Crop region: x,y:x1,y1 (1-indexed start:end coordinates)"`
 		Inline    bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
 		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
+		Legacy    bool   `short:"L" help:"Use ANSI 1990 legacy mode (no bright backgrounds)"`
 		Sauce     bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
 	} `embed:"" prefix:"" group:"Output options:"`
 }
@@ -153,7 +154,7 @@ func main() {
 		}
 
 	case "neotex":
-		decodedWidth, tok, err = splitans.NewNeotexTokenizer(data, cli.Output.Width)
+		decodedWidth, tok, err = splitans.NewNeotexTokenizer(data, cli.Output.Width, cli.Output.Legacy)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Neotex parse error: %v\n", err)
 			os.Exit(1)
@@ -229,9 +230,9 @@ func main() {
 		}
 
 		if cli.Output.Inline {
-			ansiOutput, _, err = exporter.ExportFlattenedANSIInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion, sauce)
+			ansiOutput, _, err = exporter.ExportFlattenedANSIInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cli.Output.Legacy, cropRegion, sauce)
 		} else {
-			ansiOutput, _, err = exporter.ExportFlattenedANSIWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cropRegion, sauce)
+			ansiOutput, _, err = exporter.ExportFlattenedANSIWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cli.Output.Legacy, cropRegion, sauce)
 		}
 
 		if err != nil {

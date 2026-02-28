@@ -18,7 +18,7 @@ func TestExportANSI_NoHyperlinksForCP437(t *testing.T) {
 	}
 
 	// Test UTF-8 export: should contain OSC 8 hyperlink sequences
-	utf8Output, _, err := ExportFlattenedANSI(80, 1, tokens, "utf8", false, nil)
+	utf8Output, _, err := ExportFlattenedANSI(80, 1, tokens, "utf8", false, false, nil)
 	if err != nil {
 		t.Fatalf("unexpected utf8 export error: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestExportANSI_NoHyperlinksForCP437(t *testing.T) {
 	}
 
 	// Test CP437 export: should NOT contain OSC 8 hyperlink sequences
-	cp437Output, _, err := ExportFlattenedANSI(80, 1, tokens, "cp437", false, nil)
+	cp437Output, _, err := ExportFlattenedANSI(80, 1, tokens, "cp437", false, false, nil)
 	if err != nil {
 		t.Fatalf("unexpected cp437 export error: %v", err)
 	}
@@ -58,12 +58,12 @@ func TestExportFlattenedANSIInline(t *testing.T) {
 		{Type: types.TokenText, Value: "CD"},
 	}
 
-	standard, _, err := ExportFlattenedANSI(2, 2, tokens, "utf8", false, nil)
+	standard, _, err := ExportFlattenedANSI(2, 2, tokens, "utf8", false, false, nil)
 	if err != nil {
 		t.Fatalf("unexpected standard export error: %v", err)
 	}
 
-	inline, _, err := ExportFlattenedANSIInline(2, 2, tokens, "utf8", false, nil)
+	inline, _, err := ExportFlattenedANSIInline(2, 2, tokens, "utf8", false, false, nil)
 	if err != nil {
 		t.Fatalf("unexpected inline export error: %v", err)
 	}

@@ -432,7 +432,7 @@ func TestConvertNeotexToANSI(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ExtractMetadata failed: %v", err)
 			}
-			result, err := ConvertNeotexToANSI(tt.textLines, tt.seqLines, meta.Palette)
+			result, err := ConvertNeotexToANSI(tt.textLines, tt.seqLines, meta.Palette, false)
 			if err != nil {
 				t.Fatalf("ConvertNeotexToANSI failed: %v", err)
 			}
@@ -443,6 +443,31 @@ func TestConvertNeotexToANSI(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestConvertNeotexToANSI_BrightBackgroundLegacyMode(t *testing.T) {
+	textLines := []string{"X"}
+	seqLines := []string{"1:BR"}
+	meta, err := ExtractMetadata(seqLines)
+	if err != nil {
+		t.Fatalf("ExtractMetadata failed: %v", err)
+	}
+
+	modern, err := ConvertNeotexToANSI(textLines, seqLines, meta.Palette, false)
+	if err != nil {
+		t.Fatalf("ConvertNeotexToANSI modern failed: %v", err)
+	}
+	if !contains(string(modern), "\x1b[101m") {
+		t.Fatalf("expected modern output to contain 101m, got %q", string(modern))
+	}
+
+	legacy, err := ConvertNeotexToANSI(textLines, seqLines, meta.Palette, true)
+	if err != nil {
+		t.Fatalf("ConvertNeotexToANSI legacy failed: %v", err)
+	}
+	if !contains(string(legacy), "\x1b[5;41m") {
+		t.Fatalf("expected legacy output to contain 5;41m, got %q", string(legacy))
 	}
 }
 
@@ -463,7 +488,7 @@ func findSubstring(s, substr string) bool {
 func TestNewNeotexTokenizer(t *testing.T) {
 	// Test basic tokenizer creation
 	data := []byte("Hello | 1:Fr")
-	_, tokenizer, err := NewNeotexTokenizer(data, 5)
+	_, tokenizer, err := NewNeotexTokenizer(data, 5, false)
 	if err != nil {
 		t.Fatalf("NewNeotexTokenizer failed: %v", err)
 	}
@@ -481,7 +506,7 @@ func TestNewNeotexTokenizer(t *testing.T) {
 func TestTokenizerWithMultipleStyles(t *testing.T) {
 	// Test with multiple style changes
 	data := []byte("RedGreen | 1:Fr; 4:Fg")
-	_, tokenizer, err := NewNeotexTokenizer(data, 8)
+	_, tokenizer, err := NewNeotexTokenizer(data, 8, false)
 	if err != nil {
 		t.Fatalf("NewNeotexTokenizer failed: %v", err)
 	}
@@ -510,7 +535,7 @@ func TestTokenizerWithMultipleStyles(t *testing.T) {
 
 func TestTokenizerGetStats(t *testing.T) {
 	data := []byte("Hello | 1:Fr")
-	_, tokenizer, err := NewNeotexTokenizer(data, 5)
+	_, tokenizer, err := NewNeotexTokenizer(data, 5, false)
 	if err != nil {
 		t.Fatalf("NewNeotexTokenizer failed: %v", err)
 	}
@@ -579,12 +604,6 @@ func TestParseLineSequences(t *testing.T) {
 		{
 			name:      "Duplicate positions",
 			seqLine:   "3:Fr; 3:Fg",
-			expected:  nil,
-			expectErr: true,
-		},
-		{
-			name:      "Reject bright background",
-			seqLine:   "1:BR",
 			expected:  nil,
 			expectErr: true,
 		},
@@ -793,16 +812,6 @@ func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 		{
 			name:      "Duplicate positions",
 			seqLine:   "5:Fr; 5:Hl",
-			expectErr: true,
-		},
-		{
-			name:      "Reject bright background",
-			seqLine:   "2:BR",
-			expectErr: true,
-		},
-		{
-			name:      "Reject bright hover background",
-			seqLine:   "2:HBK",
 			expectErr: true,
 		},
 	}

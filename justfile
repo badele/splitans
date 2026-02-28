@@ -54,6 +54,11 @@ go-init:
 
 # test precommit hooks
 [group('precommit')]
+precommit-reset:
+  just neotex-all-delete 16colors/1990/1990
+
+# test precommit hooks
+[group('precommit')]
 precommit-check:
   pre-commit run --all-files
 
@@ -62,11 +67,11 @@ precommit-check:
 @neotex-from-ansi FILENAME:
     rm -f "{{ FILENAME }}.*"
 
-    ./splitans -e cp437 -f ansi -E utf8 -F neotex "{{ FILENAME }}" -L 1000 > "{{ FILENAME }}.neop" 2>&1
-    ./splitans -e utf8 -f neotex -E cp437 -F ansi "{{ FILENAME }}.neop" > "{{ FILENAME }}.neop.ans" 2>&1
+    splitans -e cp437 -f ansi -E utf8 -F neotex "{{ FILENAME }}" -N 1000 > "{{ FILENAME }}.neo" 2>&1
+    splitans -e utf8 -f neotex -E cp437 -F ansi "{{ FILENAME }}.neo" -L > "{{ FILENAME }}.neo.ans" 2>&1
     ansilove "{{ FILENAME }}" > /dev/null 2>&1
-    ansilove "{{ FILENAME }}.neop.ans" > /dev/null 2>&1
-    compare -metric SSIM "{{ FILENAME }}.png" "{{ FILENAME }}.neop.ans.png" "{{ FILENAME }}.diff.png" || touch "{{ FILENAME }}.error"
+    ansilove "{{ FILENAME }}.neo.ans" > /dev/null 2>&1
+    compare -metric SSIM "{{ FILENAME }}.png" "{{ FILENAME }}.neo.ans.png" "{{ FILENAME }}.diff.png" || touch "{{ FILENAME }}.error"
 
 # Delete all neotex generated files
 [group('neotex')]
@@ -74,16 +79,25 @@ precommit-check:
     echo "Removing files computed ANSI files"
     find "{{ PATH }}" -name "*.ANS.*" -exec rm -f {} \; > /dev/null
 
+# Count netex converting errors
+[group('neotex')]
+@neotex-count-errors PATH:
+    count=$(find "{{ PATH }}" -name "*.error" | wc -l); \
+    if [ "$$count" -ne 0 ]; then \
+        echo "Found $$count neotex errors"; \
+        exit 1; \
+    fi
+
 # Convert to neotex
 [group('neotex')]
 neotex-all-from-ansi PATH:
     #!/usr/bin/env bash
     for file in $(find "{{ PATH }}" -name "*.ANS"); do
-      if [ -e "${file}.neop.ans" ]; then continue; fi
+      if [ -e "${file}.neo.ans" ]; then continue; fi
       echo -e "\n\nConverting $file to neotex format"
       just neotex-from-ansi "$file" 2>&1 || exit 1
     done;
-    find 16colors/1990/1990 -name "*.error" | wc -l
+    just neotex-count-errors {{ PATH }}
 
 # Convert all ansi file to a single png
 [group('neotex')]
@@ -92,19 +106,19 @@ ansi-all-to-one-png PATH:
     rm -f /tmp/one-ansi-file.ans-
     for file in $(find "{{ PATH }}" -name "*.ANS"); do
       echo -e "Converting $file to utf8 ansi format"
-      ./splitans -e cp437 -f ansi -E cp437 -F ansi "$file" -L 1000 >> /tmp/one-ansi-file.ans 2>&1
+      splitans -e cp437 -f ansi -E cp437 -F ansi "$file" -N 1000 -L >> /tmp/one-ansi-file.ans 2>&1
     done;
     ansilove /tmp/one-ansi-file.ans
 
 # Generate PNG comparison
 [group('doc')]
 @doc-comparison:
-  curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS  | ./splitans  -e cp437 > /tmp/WWANS157.neo
-  ./splitans -f neotex -F ansi /tmp/WWANS157.neo > /tmp/WWANS157.ans 2>&1
+  curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS  | splitans  -e cp437 > /tmp/WWANS157.neo
+  splitans -f neotex -F ansi /tmp/WWANS157.neo > /tmp/WWANS157.ans 2>&1
   reset
   cat /tmp/WWANS157.neo | pr -m -t -w 130
-  ./splitans -f neotex -F ansi  /tmp/WWANS157.neo
-  ./splitans -f neotex -F ansi -v /tmp/WWANS157.neo
+  splitans -f neotex -F ansi  /tmp/WWANS157.neo
+  splitans -f neotex -F ansi -v /tmp/WWANS157.neo
 
 # Previous README markdown
 [group('doc')]

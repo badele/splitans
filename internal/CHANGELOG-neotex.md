@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/badele/splitans/compare/neotex-format-v1.1.0...neotex-format-v1.2.0) (2026-02-28)
+
+
+### Features
+
+* add ANSI 1990 legacy mode and neotex rebuild hooks ([#37](https://github.com/badele/splitans/issues/37)) ([ed7c3f3](https://github.com/badele/splitans/commit/ed7c3f3701ba52e0a4f893155ef65e2a8a20526d))
+
 ## [1.1.0](https://github.com/badele/splitans/compare/neotex-format-v1.0.0...neotex-format-v1.1.0) (2026-02-26)
 
 

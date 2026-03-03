@@ -34,7 +34,7 @@ type CLI struct {
 		Lines     int    `short:"N" default:"1000" help:"Nb lines text"`
 		Crop      string `short:"C" help:"Crop region: x,y:x1,y1 (1-indexed start:end coordinates)"`
 		Inline    bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
-		VGA       bool   `short:"v" help:"Use true VGA colors (not affected by terminal themes)"`
+		VGA       bool   `short:"V" help:"Use true VGA colors (not affected by terminal themes)"`
 		Legacy    bool   `short:"L" help:"Use ANSI 1990 legacy mode (no bright backgrounds)"`
 		Sauce     bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
 	} `embed:"" prefix:"" group:"Output options:"`

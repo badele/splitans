@@ -26,7 +26,7 @@ to stdout.
 curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F ansi
 
 # Convert 16colors to UTF-8 ANSI with true VGA colors (disable terminal theme)
-curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F ansi -v
+curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F ansi -V
 
 # Convert 16colors legacy ANSI to neotex
 curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 > /tmp/WWANS157.neo

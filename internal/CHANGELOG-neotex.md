@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/badele/splitans/compare/neotex-format-v1.2.0...neotex-format-v1.3.0) (2026-03-05)
+
+
+### Features
+
+* add -K keep-trailing-lines option ([#41](https://github.com/badele/splitans/issues/41)) ([3b131ed](https://github.com/badele/splitans/commit/3b131ed3855744589281fea943ec2cefaa44fe02))
+
 ## [1.2.0](https://github.com/badele/splitans/compare/neotex-format-v1.1.0...neotex-format-v1.2.0) (2026-02-28)
 
 

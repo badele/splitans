@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.0](https://github.com/badele/splitans/compare/v0.9.0...v0.10.0) (2026-03-05)
+
+
+### Features
+
+* add -K keep-trailing-lines option ([#41](https://github.com/badele/splitans/issues/41)) ([3b131ed](https://github.com/badele/splitans/commit/3b131ed3855744589281fea943ec2cefaa44fe02))
+* update VGA output option command ([#39](https://github.com/badele/splitans/issues/39)) ([53a04b5](https://github.com/badele/splitans/commit/53a04b510ffa7e58c79de1715a268af071edbdf4))
+
 ## [0.9.0](https://github.com/badele/splitans/compare/v0.8.0...v0.9.0) (2026-02-28)
 
 

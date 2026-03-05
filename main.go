@@ -28,15 +28,16 @@ type CLI struct {
 	} `embed:"" prefix:"" group:"Input options:"`
 
 	Output struct {
-		Oformat   string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats,html,html-pack" help:"Output format: ansi, json, neotex, plaintext, table, stats, html, html-pack"`
-		Oencoding string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
-		Width     int    `short:"W" default:"80" help:"Width text to specified width"`
-		Lines     int    `short:"N" default:"1000" help:"Nb lines text"`
-		Crop      string `short:"C" help:"Crop region: x,y:x1,y1 (1-indexed start:end coordinates)"`
-		Inline    bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
-		VGA       bool   `short:"V" help:"Use true VGA colors (not affected by terminal themes)"`
-		Legacy    bool   `short:"L" help:"Use ANSI 1990 legacy mode (no bright backgrounds)"`
-		Sauce     bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
+		Oformat           string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats,html,html-pack" help:"Output format: ansi, json, neotex, plaintext, table, stats, html, html-pack"`
+		Oencoding         string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
+		Width             int    `short:"W" default:"80" help:"Width text to specified width"`
+		Lines             int    `short:"N" default:"1000" help:"Nb lines text"`
+		Crop              string `short:"C" help:"Crop region: x,y:x1,y1 (1-indexed start:end coordinates)"`
+		Inline            bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
+		KeepTrailingLines bool   `short:"K" help:"Preserve trailing empty lines in ansi/neotex output"`
+		VGA               bool   `short:"V" help:"Use true VGA colors (not affected by terminal themes)"`
+		Legacy            bool   `short:"L" help:"Use ANSI 1990 legacy mode (no bright backgrounds)"`
+		Sauce             bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
 	} `embed:"" prefix:"" group:"Output options:"`
 }
 
@@ -230,9 +231,9 @@ func main() {
 		}
 
 		if cli.Output.Inline {
-			ansiOutput, _, err = exporter.ExportFlattenedANSIInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cli.Output.Legacy, cropRegion, sauce)
+			ansiOutput, _, err = exporter.ExportFlattenedANSIInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cli.Output.Legacy, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		} else {
-			ansiOutput, _, err = exporter.ExportFlattenedANSIWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cli.Output.Legacy, cropRegion, sauce)
+			ansiOutput, _, err = exporter.ExportFlattenedANSIWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cli.Output.VGA, cli.Output.Legacy, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		}
 
 		if err != nil {
@@ -294,9 +295,9 @@ func main() {
 		}
 
 		if cli.Output.Inline {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		} else {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neotex format: %v\n", err)
@@ -366,9 +367,9 @@ func main() {
 		}
 
 		if cli.Output.Inline {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		} else {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neotex format for HTML: %v\n", err)
@@ -400,9 +401,9 @@ func main() {
 		}
 
 		if cli.Output.Inline {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexInlineWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		} else {
-			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce)
+			plainText, sequenceText, effectiveWidth, err = exporter.ExportFlattenedNeotexWithSauce(cli.Output.Width, cli.Output.Lines, tokens, cropRegion, sauce, cli.Output.KeepTrailingLines)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating neotex format for HTML pack: %v\n", err)

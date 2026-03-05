@@ -138,9 +138,27 @@ func TestExportToInlineNeotex(t *testing.T) {
 		t.Fatalf("unexpected inline text: got %q", text)
 	}
 
-	expectedSequences := fmt.Sprintf("!V%s; !TW6/8; !NL1; 1:Fr, Bk; 5:Fg; 7:R0", NeotexVersion)
+	expectedSequences := fmt.Sprintf("!V%s; !W6/8; !N1/1; 1:Fr, Bk; 5:Fg; 7:R0", NeotexVersion)
 	if sequences != expectedSequences {
 		t.Fatalf("unexpected inline sequences: got %q, want %q", sequences, expectedSequences)
+	}
+}
+
+func TestExportFlattenedNeotexPreservesTrailingLines(t *testing.T) {
+	tokens := []types.Token{
+		{Type: types.TokenText, Value: "A"},
+	}
+
+	text, sequences, _, err := ExportFlattenedNeotex(2, 3, tokens, nil, true)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
+
+	if got := len(strings.Split(text, "\n")); got != 3 {
+		t.Fatalf("expected 3 lines in text, got %d", got)
+	}
+	if !strings.Contains(sequences, "!N3/3") {
+		t.Fatalf("expected sequences to include !N3/3, got %q", sequences)
 	}
 }
 

@@ -369,15 +369,15 @@ const baseJS = `  const palette = [
   };
 
   const extractWidth = (raw, normalized) => {
-    const globalMatch = raw.match(/!TW=?(\d+)/);
-    if (globalMatch) return parseInt(globalMatch[1], 10);
+    const globalMatch = raw.match(/!W=?(\d+)(?:\/(\d+))?/);
+    if (globalMatch) return parseInt(globalMatch[2] || globalMatch[1], 10);
     for (let i = 0; i < normalized.length; i += 1) {
       const line = normalized[i];
       const idx = line.indexOf(' | ');
       if (idx < 0) continue;
       const seq = line.slice(idx + 3);
-      const match = seq.match(/!TW=?(\d+)/);
-      if (match) return parseInt(match[1], 10);
+      const match = seq.match(/!W=?(\d+)(?:\/(\d+))?/);
+      if (match) return parseInt(match[2] || match[1], 10);
     }
     return null;
   };
@@ -425,7 +425,7 @@ const baseJS = `  const palette = [
     const paletteMap = new Map();
     const normalized = raw.replace(/\r\n?/g, '\n').split('\n');
     const width = extractWidth(raw, normalized);
-    let seenTW = false;
+    let seenWidth = false;
 
     for (let i = 0; i < normalized.length; i += 1) {
       const line = normalized[i];
@@ -435,9 +435,9 @@ const baseJS = `  const palette = [
       if (sepIndex < 0) continue;
       const seqPart = line.slice(sepIndex + 3);
       collectPaletteEntries(seqPart, paletteMap);
-      if (!seenTW) {
-        if (!seqPart.includes('!TW')) continue;
-        seenTW = true;
+      if (!seenWidth) {
+        if (!seqPart.includes('!W')) continue;
+        seenWidth = true;
       }
 
       if (width !== null) {

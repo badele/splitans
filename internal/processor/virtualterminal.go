@@ -109,12 +109,18 @@ func (vt *VirtualTerminal) ApplyTokens(tokens []types.Token) error {
 // The legacyMode ensures ANSI 1990 compatibility by using reset+rebuild
 // when attributes need to be turned OFF, rather than using codes like [22m, [23m, etc.
 func (vt *VirtualTerminal) ExportFlattenedANSI() string {
-	return vt.exportFlattenedANSI(false)
+	return vt.exportFlattenedANSI(false, true)
+}
+
+// ExportFlattenedANSIWithTrailing exports the buffer with optimized ANSI codes
+// and preserves trailing empty lines.
+func (vt *VirtualTerminal) ExportFlattenedANSIWithTrailing() string {
+	return vt.exportFlattenedANSI(false, false)
 }
 
 // ExportFlattenedANSIInline exports the buffer as a single line with minimal ANSI codes.
 func (vt *VirtualTerminal) ExportFlattenedANSIInline() string {
-	return vt.exportFlattenedANSI(true)
+	return vt.exportFlattenedANSI(true, true)
 }
 
 // ExportPlainText exports the buffer as plain text without ANSI codes
@@ -131,6 +137,16 @@ func (vt *VirtualTerminal) ExportPlainTextInline() string {
 // ExportSplitTextAndSequences exports the buffer as separate text and sequences
 // Returns a slice of LineWithSequences, each containing the plain text and SGR changes
 func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequences {
+	return vt.exportSplitTextAndSequences(true)
+}
+
+// ExportSplitTextAndSequencesWithTrailing exports the buffer as separate text and sequences,
+// keeping trailing empty lines.
+func (vt *VirtualTerminal) ExportSplitTextAndSequencesWithTrailing() []types.LineWithSequences {
+	return vt.exportSplitTextAndSequences(false)
+}
+
+func (vt *VirtualTerminal) exportSplitTextAndSequences(trimTrailing bool) []types.LineWithSequences {
 	result := []types.LineWithSequences{}
 	var currentSGR *types.SGR = nil
 	var currentHyperlink *types.Hyperlink = nil
@@ -138,12 +154,13 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 
 	maxCursorY := 0
 	for y := 0; y < vt.height; y++ {
-
-		// Check if line has content
-		for x := 0; x < vt.width; x++ {
-			if vt.buffer[y][x].Char != 0x0 {
-				maxCursorY = max(maxCursorY, y)
-				break
+		if trimTrailing {
+			// Check if line has content
+			for x := 0; x < vt.width; x++ {
+				if vt.buffer[y][x].Char != 0x0 {
+					maxCursorY = max(maxCursorY, y)
+					break
+				}
 			}
 		}
 
@@ -220,7 +237,11 @@ func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequenc
 		result = append(result, line)
 	}
 
-	return result[:maxCursorY+1]
+	if trimTrailing {
+		return result[:maxCursorY+1]
+	}
+
+	return result
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -806,8 +827,8 @@ func (vt *VirtualTerminal) eraseLine(mode int) {
 	}
 }
 
-func (vt *VirtualTerminal) exportFlattenedANSI(inline bool) string {
-	lines := vt.ExportSplitTextAndSequences()
+func (vt *VirtualTerminal) exportFlattenedANSI(inline bool, trimTrailing bool) string {
+	lines := vt.exportSplitTextAndSequences(trimTrailing)
 	var builder strings.Builder
 
 	// Track the current SGR state across all lines for differential encoding

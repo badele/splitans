@@ -21,9 +21,10 @@ type NeotexMetadata struct {
 	VersionMinor int
 	VersionPatch int
 
-	TrimmedWidth int               // Trimmed width (!TW73/80 -> 73)
-	Width        int               // Total width (!TW73/80 -> 80)
-	NbLines      int               // Number of lines with content (!NL<n>)
+	TrimmedWidth int               // Trimmed width (!W73/80 -> 73)
+	Width        int               // Total width (!W73/80 -> 80)
+	NbLines      int               // Trimmed lines (!N10/25 -> 10)
+	Lines        int               // Total lines (!N10/25 -> 25)
 	Extra        map[string]string // Other metadata (!key:value)
 	Sauce        *types.Sauce      // SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
 	Palette      map[int]types.ColorValue
@@ -181,30 +182,41 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 				continue
 			}
 
-			// Check trimmed width TW<trimmed>/<total> or TW<number>
-			if twValue, ok, err := parseNeotexLabel(entry, "TW"); ok {
-				if err != nil || twValue == "" {
+			// Check trimmed width W<trimmed>/<total> or W<number>
+			if wValue, ok, err := parseNeotexLabel(entry, "W"); ok {
+				if err != nil || wValue == "" {
 					continue
 				}
-				if parts := strings.Split(twValue, "/"); len(parts) == 2 {
-					// Format: TW73/80
+				if parts := strings.Split(wValue, "/"); len(parts) == 2 {
+					// Format: W73/80
 					if v, err := strconv.Atoi(parts[0]); err == nil {
 						meta.TrimmedWidth = v
 					}
 					if v, err := strconv.Atoi(parts[1]); err == nil {
 						meta.Width = v
 					}
+				} else if v, err := strconv.Atoi(wValue); err == nil {
+					meta.TrimmedWidth = v
+					meta.Width = v
 				}
 				continue
 			}
 
-			// Check number of lines NL<number>
-			if nlValue, ok, err := parseNeotexLabel(entry, "NL"); ok {
-				if err != nil || nlValue == "" {
+			// Check number of lines N<trimmed>/<total> or N<number>
+			if nValue, ok, err := parseNeotexLabel(entry, "N"); ok {
+				if err != nil || nValue == "" {
 					continue
 				}
-				if v, err := strconv.Atoi(nlValue); err == nil {
+				if parts := strings.Split(nValue, "/"); len(parts) == 2 {
+					if v, err := strconv.Atoi(parts[0]); err == nil {
+						meta.NbLines = v
+					}
+					if v, err := strconv.Atoi(parts[1]); err == nil {
+						meta.Lines = v
+					}
+				} else if v, err := strconv.Atoi(nValue); err == nil {
 					meta.NbLines = v
+					meta.Lines = v
 				}
 				continue
 			}
@@ -227,12 +239,14 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 	// Parse SAUCE metadata from collected tokens
 	meta.Sauce = parseSauceLabels(allTokens)
 
-	// Populate SAUCE dimensions from !TW and !NL if SAUCE exists
+	// Populate SAUCE dimensions from !W and !N if SAUCE exists
 	if meta.Sauce != nil {
 		if meta.Width > 0 {
 			meta.Sauce.TInfo1 = uint16(meta.Width)
 		}
-		if meta.NbLines > 0 {
+		if meta.Lines > 0 {
+			meta.Sauce.TInfo2 = uint16(meta.Lines)
+		} else if meta.NbLines > 0 {
 			meta.Sauce.TInfo2 = uint16(meta.NbLines)
 		}
 	}
@@ -243,7 +257,7 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 // parseSauceLabels extracts SAUCE metadata from neotex labels.
 // All SAUCE labels start with "!S" prefix (e.g., !ST, !SA, !SG, !SD, !SF, !SI).
 // Note: !SW and !SH are still parsed for backward compatibility but dimensions
-// are now taken from !TW and !NL metadata.
+// are now taken from !W and !N metadata.
 // Returns nil if no SAUCE labels are found.
 func parseSauceLabels(tokens []string) *types.Sauce {
 	var sauce *types.Sauce

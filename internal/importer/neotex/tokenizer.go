@@ -323,10 +323,24 @@ func SplitNeotexFormat(width int, data []byte) (parsedWidth int, textLines []str
 		width = 80
 	}
 	if len(lines) > 0 {
-		if twIndex := strings.Index(lines[0], "!TW"); twIndex >= 0 {
-			rest := lines[0][twIndex+3:]
+		if wIndex := strings.Index(lines[0], "!W"); wIndex >= 0 {
+			rest := lines[0][wIndex+2:]
+			if strings.HasPrefix(rest, "=") {
+				rest = rest[1:]
+			}
 			if slashIndex := strings.Index(rest, "/"); slashIndex >= 0 {
 				value := rest[slashIndex+1:]
+				digitEnd := 0
+				for digitEnd < len(value) && value[digitEnd] >= '0' && value[digitEnd] <= '9' {
+					digitEnd++
+				}
+				if digitEnd > 0 {
+					if v, err := strconv.Atoi(value[:digitEnd]); err == nil {
+						width = v
+					}
+				}
+			} else {
+				value := rest
 				digitEnd := 0
 				for digitEnd < len(value) && value[digitEnd] >= '0' && value[digitEnd] <= '9' {
 					digitEnd++

@@ -9,17 +9,17 @@ import (
 
 // ExportFlattenedANSI exports tokens to flattened ANSI format.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion) (string, int, error) {
-	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, false, crop)
+func ExportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, keepTrailing bool) (string, int, error) {
+	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, false, crop, keepTrailing)
 }
 
 // ExportFlattenedANSIInline flattens ANSI output on a single line.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIInline(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion) (string, int, error) {
-	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, true, crop)
+func ExportFlattenedANSIInline(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, keepTrailing bool) (string, int, error) {
+	return exportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, true, crop, keepTrailing)
 }
 
-func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, inline bool, crop *types.CropRegion) (string, int, error) {
+func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, inline bool, crop *types.CropRegion, keepTrailing bool) (string, int, error) {
 	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, useVGAColors, legacyMode)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
@@ -39,6 +39,9 @@ func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncodin
 	if inline {
 		return vt.ExportFlattenedANSIInline(), effectiveWidth, nil
 	}
+	if keepTrailing {
+		return vt.ExportFlattenedANSIWithTrailing(), effectiveWidth, nil
+	}
 
 	return vt.ExportFlattenedANSI(), effectiveWidth, nil
 }
@@ -47,18 +50,18 @@ func exportFlattenedANSI(width, nblines int, tokens []types.Token, outputEncodin
 // If sauce is nil, behaves identically to ExportFlattenedANSI.
 // When dimensions are missing in the SAUCE record, content bounds are used to fill them.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
-	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, false, crop, sauce)
+func ExportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, sauce *types.Sauce, keepTrailing bool) (string, int, error) {
+	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, false, crop, sauce, keepTrailing)
 }
 
 // ExportFlattenedANSIInlineWithSauce exports tokens to single-line ANSI format with SAUCE metadata appended.
 // If sauce is nil, behaves identically to ExportFlattenedANSIInline.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
-	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, true, crop, sauce)
+func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *types.CropRegion, sauce *types.Sauce, keepTrailing bool) (string, int, error) {
+	return exportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, true, crop, sauce, keepTrailing)
 }
 
-func exportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, inline bool, crop *types.CropRegion, sauce *types.Sauce) (string, int, error) {
+func exportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outputEncoding string, useVGAColors bool, legacyMode bool, inline bool, crop *types.CropRegion, sauce *types.Sauce, keepTrailing bool) (string, int, error) {
 	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, useVGAColors, legacyMode)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
@@ -78,6 +81,8 @@ func exportFlattenedANSIWithSauce(width, nblines int, tokens []types.Token, outp
 	var ansiOutput string
 	if inline {
 		ansiOutput = vt.ExportFlattenedANSIInline()
+	} else if keepTrailing {
+		ansiOutput = vt.ExportFlattenedANSIWithTrailing()
 	} else {
 		ansiOutput = vt.ExportFlattenedANSI()
 	}

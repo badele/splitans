@@ -294,7 +294,7 @@ func NewANSITokenizerWithEncoding(input []byte, encoding string) *ANSITokenizer 
 // NewNeotexTokenizer creates a new tokenizer for Neotex format data.
 // The width parameter specifies the expected line width.
 // legacyMode forces ANSI 1990 compatibility when converting neotex sequences.
-// Returns the parsed width (overrides when !TWxx/yy is present), the tokenizer, and error.
+// Returns the parsed width (overrides when !Wxx/yy is present), the tokenizer, and error.
 func NewNeotexTokenizer(data []byte, width int, legacyMode bool) (int, *NeotexTokenizer, error) {
 	return neotex.NewNeotexTokenizer(data, width, legacyMode)
 }
@@ -336,14 +336,14 @@ func ParseCropRegion(s string) (*CropRegion, error) {
 // If crop is non-nil, the output will be cropped to the specified region.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop)
+	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, false)
 }
 
 // ExportFlattenedANSIInline exports tokens to a single-line ANSI string.
 // legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop)
+	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, false)
 }
 
 // ExportFlattenedANSIWithSauce exports tokens to a flattened ANSI string with SAUCE metadata appended.
@@ -352,7 +352,7 @@ func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncodin
 // When sauce is provided, the actual content dimensions are calculated and stored in the SAUCE record.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedANSIWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
-	return exporter.ExportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce)
+	return exporter.ExportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce, false)
 }
 
 // ExportFlattenedANSIInlineWithSauce exports tokens to a single-line ANSI string with SAUCE metadata appended.
@@ -360,7 +360,7 @@ func ExportFlattenedANSIWithSauce(width, nblines int, tokens []Token, outputEnco
 // legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
-	return exporter.ExportFlattenedANSIInlineWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce)
+	return exporter.ExportFlattenedANSIInlineWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce, false)
 }
 
 // ExportFlattenedText exports tokens to plain text without ANSI codes.
@@ -385,14 +385,14 @@ func ExportFlattenedTextInline(width, nblines int, tokens []Token, outputEncodin
 //
 // If crop is non-nil, the output will be cropped to the specified region.
 func ExportFlattenedNeotex(width, nblines int, tokens []Token, crop *CropRegion) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotex(width, nblines, tokens, crop)
+	return exporter.ExportFlattenedNeotex(width, nblines, tokens, crop, false)
 }
 
 // ExportFlattenedNeotexInline exports tokens to inline Neotex format.
 // This flattens all lines into a single line and adjusts sequence positions.
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 func ExportFlattenedNeotexInline(width, nblines int, tokens []Token, crop *CropRegion) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens, crop)
+	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens, crop, false)
 }
 
 // ExportFlattenedNeotexWithSauce exports tokens to Neotex format with SAUCE metadata on the last line.
@@ -403,7 +403,7 @@ func ExportFlattenedNeotexInline(width, nblines int, tokens []Token, crop *CropR
 //
 // If sauce is nil, behaves identically to ExportFlattenedNeotex.
 func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotexWithSauce(width, nblines, tokens, crop, sauce)
+	return exporter.ExportFlattenedNeotexWithSauce(width, nblines, tokens, crop, sauce, false)
 }
 
 // ExportFlattenedNeotexInlineWithSauce exports tokens to inline Neotex format with SAUCE metadata.
@@ -411,7 +411,7 @@ func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []Token, crop *Cr
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 // If sauce is nil, behaves identically to ExportFlattenedNeotexInline.
 func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotexInlineWithSauce(width, nblines, tokens, crop, sauce)
+	return exporter.ExportFlattenedNeotexInlineWithSauce(width, nblines, tokens, crop, sauce, false)
 }
 
 // SGRToNeotex converts an SGR struct to neotex format strings.

@@ -261,38 +261,38 @@ func DiffSGRToNeotex(current, previous *types.SGR) []string {
 // - sequences is the neotex format sequences with positions (per line)
 // Uses differential encoding to minimize the number of codes by only outputting changes.
 func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
-	return exportToNeotex(vt, false)
+	return exportToNeotex(vt, false, false)
 }
 
 // ExportToInlineNeotex exports the buffer to neotex format, flattening all lines into one.
 func ExportToInlineNeotex(vt *processor.VirtualTerminal) (string, string) {
-	return exportToNeotex(vt, true)
+	return exportToNeotex(vt, true, false)
 }
 
 // ExportFlattenedNeotex exports tokens to neotex format (always UTF-8)
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedNeotex(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
-	return exportFlattenedNeotex(width, nblines, tokens, false, crop)
+func ExportFlattenedNeotex(width, nblines int, tokens []types.Token, crop *types.CropRegion, keepTrailing bool) (string, string, int, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, false, crop, keepTrailing)
 }
 
 // ExportFlattenedNeotexInline exports tokens to inline neotex format (always UTF-8)
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop *types.CropRegion) (string, string, int, error) {
-	return exportFlattenedNeotex(width, nblines, tokens, true, crop)
+func ExportFlattenedNeotexInline(width, nblines int, tokens []types.Token, crop *types.CropRegion, keepTrailing bool) (string, string, int, error) {
+	return exportFlattenedNeotex(width, nblines, tokens, true, crop, keepTrailing)
 }
 
 // ExportFlattenedNeotexWithSauce exports tokens to neotex format with SAUCE metadata on the last line.
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 // If sauce is nil, behaves identically to ExportFlattenedNeotex.
-func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, crop *types.CropRegion, sauce *types.Sauce) (string, string, int, error) {
-	return exportFlattenedNeotexWithSauce(width, nblines, tokens, false, crop, sauce)
+func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, crop *types.CropRegion, sauce *types.Sauce, keepTrailing bool) (string, string, int, error) {
+	return exportFlattenedNeotexWithSauce(width, nblines, tokens, false, crop, sauce, keepTrailing)
 }
 
 // ExportFlattenedNeotexInlineWithSauce exports tokens to inline neotex format with SAUCE metadata.
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 // If sauce is nil, behaves identically to ExportFlattenedNeotexInline.
-func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []types.Token, crop *types.CropRegion, sauce *types.Sauce) (string, string, int, error) {
-	return exportFlattenedNeotexWithSauce(width, nblines, tokens, true, crop, sauce)
+func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []types.Token, crop *types.CropRegion, sauce *types.Sauce, keepTrailing bool) (string, string, int, error) {
+	return exportFlattenedNeotexWithSauce(width, nblines, tokens, true, crop, sauce, keepTrailing)
 }
 
 // formatNeotexLabel chooses between the short form (!KEYvalue) and protected form
@@ -312,7 +312,7 @@ func formatNeotexLabel(key, value string) (string, error) {
 
 // sauceToNeotexLabels converts SAUCE metadata to neotex label format.
 // All SAUCE labels start with "!S" prefix, so no separate marker is needed.
-// Note: Width and Height are not exported here as they use !TW and !NL metadata.
+// Note: Width and Height are not exported here as they use !W and !N metadata.
 func sauceToNeotexLabels(sauce *types.Sauce) ([]string, error) {
 	if sauce == nil {
 		return nil, nil
@@ -489,8 +489,11 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 	}}
 }
 
-func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string) {
+func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing bool) (string, string) {
 	lines := vt.ExportSplitTextAndSequences()
+	if keepTrailing && !inline {
+		lines = vt.ExportSplitTextAndSequencesWithTrailing()
+	}
 	buffer := vt.GetBuffer()
 
 	if inline {
@@ -511,6 +514,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 	textWidth := vt.GetWidth()
 	maxWidth := vt.GetMaxCursorX() + 1
 	lineCount := len(lines)
+	totalLines := vt.GetHeight()
 
 	if inline {
 		textRunes := []rune(lines[0].Text)
@@ -524,6 +528,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 			}
 		}
 		lineCount = 1
+		totalLines = lineCount
 	}
 
 	defaultSGR := types.NewSGR()
@@ -560,8 +565,8 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 		// Add version metadata on the first line
 		if lineIdx == 0 {
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!V%s", NeotexVersion))
-			lineSeqs = append(lineSeqs, fmt.Sprintf("!TW%d/%d", maxWidth, textWidth))
-			lineSeqs = append(lineSeqs, fmt.Sprintf("!NL%d", lineCount))
+			lineSeqs = append(lineSeqs, fmt.Sprintf("!W%d/%d", maxWidth, textWidth))
+			lineSeqs = append(lineSeqs, fmt.Sprintf("!N%d/%d", lineCount, totalLines))
 		}
 
 		// Merge SGR and hyperlink sequences by position
@@ -656,7 +661,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool) (string, string)
 	return textBuilder.String(), seqBuilder.String()
 }
 
-func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion) (string, string, int, error) {
+func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion, keepTrailing bool) (string, string, int, error) {
 	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false, false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
@@ -675,18 +680,18 @@ func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool
 
 	var text, sequences string
 	if inline {
-		text, sequences = ExportToInlineNeotex(vt)
+		text, sequences = exportToNeotex(vt, true, false)
 	} else {
-		text, sequences = ExportToNeotex(vt)
+		text, sequences = exportToNeotex(vt, false, keepTrailing)
 	}
 
 	return text, sequences, effectiveWidth, nil
 }
 
-func exportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion, sauce *types.Sauce) (string, string, int, error) {
+func exportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion, sauce *types.Sauce, keepTrailing bool) (string, string, int, error) {
 	// If no SAUCE, delegate to the regular export function
 	if sauce == nil {
-		return exportFlattenedNeotex(width, nblines, tokens, inline, crop)
+		return exportFlattenedNeotex(width, nblines, tokens, inline, crop, keepTrailing)
 	}
 
 	vt := processor.NewVirtualTerminal(width, nblines, "utf8", false, false)
@@ -707,9 +712,9 @@ func exportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, in
 
 	var text, sequences string
 	if inline {
-		text, sequences = ExportToInlineNeotex(vt)
+		text, sequences = exportToNeotex(vt, true, false)
 	} else {
-		text, sequences = ExportToNeotex(vt)
+		text, sequences = exportToNeotex(vt, false, keepTrailing)
 	}
 
 	// Append SAUCE line: empty text line + SAUCE labels

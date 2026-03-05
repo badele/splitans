@@ -304,7 +304,7 @@ func TestExtractMetadata(t *testing.T) {
 		},
 		{
 			name:     "Trimmed width with total",
-			seqLines: []string{"!TW73/80"},
+			seqLines: []string{"!W73/80"},
 			expected: NeotexMetadata{
 				TrimmedWidth: 73,
 				Width:        80,
@@ -313,15 +313,16 @@ func TestExtractMetadata(t *testing.T) {
 		},
 		{
 			name:     "Number of lines",
-			seqLines: []string{"!NL42"},
+			seqLines: []string{"!N42/100"},
 			expected: NeotexMetadata{
 				NbLines: 42,
+				Lines:   100,
 				Extra:   make(map[string]string),
 			},
 		},
 		{
 			name:     "Multiple metadata",
-			seqLines: []string{fmt.Sprintf("!V%s; !TW73/80; !NL42", exporter.NeotexVersion)},
+			seqLines: []string{fmt.Sprintf("!V%s; !W73/80; !N42/100", exporter.NeotexVersion)},
 			expected: NeotexMetadata{
 				VersionRaw:   exporter.NeotexVersion,
 				Version:      versionMajor,
@@ -331,6 +332,7 @@ func TestExtractMetadata(t *testing.T) {
 				TrimmedWidth: 73,
 				Width:        80,
 				NbLines:      42,
+				Lines:        100,
 				Extra:        make(map[string]string),
 			},
 		},
@@ -377,6 +379,9 @@ func TestExtractMetadata(t *testing.T) {
 			}
 			if meta.NbLines != tt.expected.NbLines {
 				t.Errorf("NbLines: expected %d, got %d", tt.expected.NbLines, meta.NbLines)
+			}
+			if meta.Lines != tt.expected.Lines {
+				t.Errorf("Lines: expected %d, got %d", tt.expected.Lines, meta.Lines)
 			}
 		})
 	}

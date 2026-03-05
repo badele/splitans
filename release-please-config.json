@@ -10,16 +10,7 @@
         {
           "type": "generic",
           "path": "flake.nix"
-        }
-      ]
-    },
-    "internal": {
-      "release-type": "simple",
-      "component": "neotex-format",
-      "package-name": "neotex-format",
-      "changelog-path": "CHANGELOG-neotex.md",
-      "include-component-in-tag": true,
-      "extra-files": [
+        },
         {
           "type": "generic",
           "path": "internal/exporter/neotex.go"

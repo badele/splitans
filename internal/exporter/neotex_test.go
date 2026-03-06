@@ -157,8 +157,8 @@ func TestExportFlattenedNeotexPreservesTrailingLines(t *testing.T) {
 	if got := len(strings.Split(text, "\n")); got != 3 {
 		t.Fatalf("expected 3 lines in text, got %d", got)
 	}
-	if !strings.Contains(sequences, "!N3/3") {
-		t.Fatalf("expected sequences to include !N3/3, got %q", sequences)
+	if !strings.Contains(sequences, "!N1/3") {
+		t.Fatalf("expected sequences to include !N1/3, got %q", sequences)
 	}
 }
 

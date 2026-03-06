@@ -490,10 +490,7 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 }
 
 func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing bool) (string, string) {
-	lines := vt.ExportSplitTextAndSequences()
-	if keepTrailing && !inline {
-		lines = vt.ExportSplitTextAndSequencesWithTrailing()
-	}
+	lines := vt.ExportSplitTextAndSequences(keepTrailing && !inline)
 	buffer := vt.GetBuffer()
 
 	if inline {
@@ -513,7 +510,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing boo
 
 	textWidth := vt.GetWidth()
 	maxWidth := vt.GetMaxCursorX() + 1
-	lineCount := len(lines)
+	lineCount := vt.GetMaxCursorY() + 1
 	totalLines := vt.GetHeight()
 
 	if inline {

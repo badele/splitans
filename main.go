@@ -31,7 +31,7 @@ type CLI struct {
 		Oformat           string `short:"F" default:"neotex" enum:"ansi,json,neotex,plaintext,table,stats,html,html-pack" help:"Output format: ansi, json, neotex, plaintext, table, stats, html, html-pack"`
 		Oencoding         string `short:"E" default:"utf8" enum:"cp437,cp850,utf8,iso-8859-1" help:"Output encoding: cp437, cp850, utf8, iso-8859-1"`
 		Width             int    `short:"W" default:"80" help:"Width text to specified width"`
-		Lines             int    `short:"N" default:"1000" help:"Nb lines text"`
+		Lines             int    `short:"N" default:"25" help:"Nb lines text"`
 		Crop              string `short:"C" help:"Crop region: x,y:x1,y1 (1-indexed start:end coordinates)"`
 		Inline            bool   `short:"I" help:"Flatten output on a single line (neotex, ansi, plaintext)"`
 		KeepTrailingLines bool   `short:"K" help:"Preserve trailing empty lines in ansi/neotex output"`
@@ -188,7 +188,7 @@ func main() {
 				cli.Output.Width = int(token.Sauce.TInfo1)
 			}
 			// Use SAUCE height if CLI is at default value
-			if token.Sauce.TInfo2 > 0 && cli.Output.Lines == 1000 {
+			if token.Sauce.TInfo2 > 0 && cli.Output.Lines == 25 {
 				cli.Output.Lines = int(token.Sauce.TInfo2)
 			}
 			break
@@ -326,9 +326,9 @@ func main() {
 	case "plaintext":
 		var plainText string
 		if cli.Output.Inline {
-			plainText, _, err = exporter.ExportFlattenedTextInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion)
+			plainText, _, err = exporter.ExportFlattenedTextInline(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion, cli.Output.KeepTrailingLines)
 		} else {
-			plainText, _, err = exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion)
+			plainText, _, err = exporter.ExportFlattenedText(cli.Output.Width, cli.Output.Lines, tokens, cli.Output.Oencoding, cropRegion, cli.Output.KeepTrailingLines)
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error displaying plain text: %v\n", err)

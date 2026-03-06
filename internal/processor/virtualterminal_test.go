@@ -20,7 +20,7 @@ func TestWriteTextDoesNotInsertExtraBlankLineOnExactWidth(t *testing.T) {
 		t.Fatalf("unexpected apply error: %v", err)
 	}
 
-	lines := vt.ExportSplitTextAndSequences()
+	lines := vt.ExportSplitTextAndSequences(false)
 	if got := len(lines); got != 2 {
 		t.Fatalf("expected 2 lines, got %d", got)
 	}

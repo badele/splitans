@@ -8,19 +8,21 @@ import (
 )
 
 // ExportFlattenedText exports tokens to flattened plain text without styles
-// using a virtual terminal buffer to resolve cursor positioning
-// Returns (text, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedText(width, nblines int, tokens []types.Token, outputEncoding string, crop *types.CropRegion) (string, int, error) {
-	return exportFlattenedText(width, nblines, tokens, outputEncoding, false, crop)
+// using a virtual terminal buffer to resolve cursor positioning.
+// Returns (text, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+// When keepTrailing is true, trailing empty lines are preserved.
+func ExportFlattenedText(width, nblines int, tokens []types.Token, outputEncoding string, crop *types.CropRegion, keepTrailing bool) (string, int, error) {
+	return exportFlattenedText(width, nblines, tokens, outputEncoding, false, crop, keepTrailing)
 }
 
 // ExportFlattenedTextInline exports tokens to flattened plain text on a single line.
-// Returns (text, effectiveWidth, error) where effectiveWidth is the VT width after crop
-func ExportFlattenedTextInline(width, nblines int, tokens []types.Token, outputEncoding string, crop *types.CropRegion) (string, int, error) {
-	return exportFlattenedText(width, nblines, tokens, outputEncoding, true, crop)
+// Returns (text, effectiveWidth, error) where effectiveWidth is the VT width after crop.
+// The keepTrailing flag is ignored for inline output.
+func ExportFlattenedTextInline(width, nblines int, tokens []types.Token, outputEncoding string, crop *types.CropRegion, keepTrailing bool) (string, int, error) {
+	return exportFlattenedText(width, nblines, tokens, outputEncoding, true, crop, keepTrailing)
 }
 
-func exportFlattenedText(width, nblines int, tokens []types.Token, outputEncoding string, inline bool, crop *types.CropRegion) (string, int, error) {
+func exportFlattenedText(width, nblines int, tokens []types.Token, outputEncoding string, inline bool, crop *types.CropRegion, keepTrailing bool) (string, int, error) {
 	vt := processor.NewVirtualTerminal(width, nblines, outputEncoding, false, false)
 
 	if err := vt.ApplyTokens(tokens); err != nil {
@@ -41,5 +43,5 @@ func exportFlattenedText(width, nblines int, tokens []types.Token, outputEncodin
 		return vt.ExportPlainTextInline(), effectiveWidth, nil
 	}
 
-	return vt.ExportPlainText(), effectiveWidth, nil
+	return vt.ExportPlainText(keepTrailing), effectiveWidth, nil
 }

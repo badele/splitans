@@ -123,27 +123,23 @@ func (vt *VirtualTerminal) ExportFlattenedANSIInline() string {
 	return vt.exportFlattenedANSI(true, true)
 }
 
-// ExportPlainText exports the buffer as plain text without ANSI codes
-// Uses ExportSplitTextAndSequences and extracts only the text part
-func (vt *VirtualTerminal) ExportPlainText() string {
-	return vt.exportPlainText(false)
+// ExportPlainText exports the buffer as plain text without ANSI codes.
+// Uses ExportSplitTextAndSequences and extracts only the text part.
+// When keepTrailing is true, trailing empty lines are preserved.
+func (vt *VirtualTerminal) ExportPlainText(keepTrailing bool) string {
+	return vt.exportPlainText(false, keepTrailing)
 }
 
 // ExportPlainTextInline exports the buffer as plain text without newlines.
 func (vt *VirtualTerminal) ExportPlainTextInline() string {
-	return vt.exportPlainText(true)
+	return vt.exportPlainText(true, false)
 }
 
-// ExportSplitTextAndSequences exports the buffer as separate text and sequences
-// Returns a slice of LineWithSequences, each containing the plain text and SGR changes
-func (vt *VirtualTerminal) ExportSplitTextAndSequences() []types.LineWithSequences {
-	return vt.exportSplitTextAndSequences(true)
-}
-
-// ExportSplitTextAndSequencesWithTrailing exports the buffer as separate text and sequences,
-// keeping trailing empty lines.
-func (vt *VirtualTerminal) ExportSplitTextAndSequencesWithTrailing() []types.LineWithSequences {
-	return vt.exportSplitTextAndSequences(false)
+// ExportSplitTextAndSequences exports the buffer as separate text and sequences.
+// Returns a slice of LineWithSequences, each containing the plain text and SGR changes.
+// When keepTrailing is true, trailing empty lines are preserved.
+func (vt *VirtualTerminal) ExportSplitTextAndSequences(keepTrailing bool) []types.LineWithSequences {
+	return vt.exportSplitTextAndSequences(!keepTrailing)
 }
 
 func (vt *VirtualTerminal) exportSplitTextAndSequences(trimTrailing bool) []types.LineWithSequences {
@@ -927,8 +923,8 @@ func hyperlinkToOSC8(h *types.Hyperlink) string {
 	return "\x1b]8;" + params + ";" + h.URL + "\x1b\\"
 }
 
-func (vt *VirtualTerminal) exportPlainText(inline bool) string {
-	lines := vt.ExportSplitTextAndSequences()
+func (vt *VirtualTerminal) exportPlainText(inline bool, keepTrailing bool) string {
+	lines := vt.ExportSplitTextAndSequences(keepTrailing)
 
 	var builder strings.Builder
 	for _, line := range lines {

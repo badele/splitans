@@ -14,7 +14,7 @@
 //	utf8Data, _ := splitans.ConvertToUTF8(data, "cp437")
 //	tokenizer := splitans.NewANSITokenizer(utf8Data)
 //	tokens := tokenizer.Tokenize()
-//	output, _ := splitans.ExportFlattenedANSI(80, 25, tokens, "utf8", true, false)
+//	output, _, _ := splitans.ExportFlattenedANSI(80, 25, tokens, "utf8", true, false, nil, false)
 package splitans
 
 import (
@@ -334,16 +334,18 @@ func ParseCropRegion(s string) (*CropRegion, error) {
 // and produces clean ANSI output.
 // legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // If crop is non-nil, the output will be cropped to the specified region.
+// When keepTrailingLines is true, trailing empty lines are preserved.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, false)
+func ExportFlattenedANSI(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, keepTrailingLines bool) (string, int, error) {
+	return exporter.ExportFlattenedANSI(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, keepTrailingLines)
 }
 
 // ExportFlattenedANSIInline exports tokens to a single-line ANSI string.
 // legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, false)
+// The keepTrailingLines flag is ignored for inline output.
+func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, keepTrailingLines bool) (string, int, error) {
+	return exporter.ExportFlattenedANSIInline(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, keepTrailingLines)
 }
 
 // ExportFlattenedANSIWithSauce exports tokens to a flattened ANSI string with SAUCE metadata appended.
@@ -351,30 +353,34 @@ func ExportFlattenedANSIInline(width, nblines int, tokens []Token, outputEncodin
 // legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // When sauce is provided, the actual content dimensions are calculated and stored in the SAUCE record.
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
-	return exporter.ExportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce, false)
+// When keepTrailingLines is true, trailing empty lines are preserved.
+func ExportFlattenedANSIWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce, keepTrailingLines bool) (string, int, error) {
+	return exporter.ExportFlattenedANSIWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce, keepTrailingLines)
 }
 
 // ExportFlattenedANSIInlineWithSauce exports tokens to a single-line ANSI string with SAUCE metadata appended.
 // If sauce is nil, behaves identically to ExportFlattenedANSIInline.
 // legacyMode forces ANSI 1990 compatibility (no 100-107 backgrounds).
 // Returns (output, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce) (string, int, error) {
-	return exporter.ExportFlattenedANSIInlineWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce, false)
+// The keepTrailingLines flag is ignored for inline output.
+func ExportFlattenedANSIInlineWithSauce(width, nblines int, tokens []Token, outputEncoding string, useVGAColors bool, legacyMode bool, crop *CropRegion, sauce *Sauce, keepTrailingLines bool) (string, int, error) {
+	return exporter.ExportFlattenedANSIInlineWithSauce(width, nblines, tokens, outputEncoding, useVGAColors, legacyMode, crop, sauce, keepTrailingLines)
 }
 
 // ExportFlattenedText exports tokens to plain text without ANSI codes.
 // This processes tokens through a virtual terminal and outputs only the text content.
 // If crop is non-nil, the output will be cropped to the specified region.
+// When keepTrailingLines is true, trailing empty lines are preserved.
 // Returns (text, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedText(width, nblines int, tokens []Token, outputEncoding string, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedText(width, nblines, tokens, outputEncoding, crop)
+func ExportFlattenedText(width, nblines int, tokens []Token, outputEncoding string, crop *CropRegion, keepTrailingLines bool) (string, int, error) {
+	return exporter.ExportFlattenedText(width, nblines, tokens, outputEncoding, crop, keepTrailingLines)
 }
 
 // ExportFlattenedTextInline exports tokens to plain text on a single line.
 // Returns (text, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedTextInline(width, nblines int, tokens []Token, outputEncoding string, crop *CropRegion) (string, int, error) {
-	return exporter.ExportFlattenedTextInline(width, nblines, tokens, outputEncoding, crop)
+// The keepTrailingLines flag is ignored for inline output.
+func ExportFlattenedTextInline(width, nblines int, tokens []Token, outputEncoding string, crop *CropRegion, keepTrailingLines bool) (string, int, error) {
+	return exporter.ExportFlattenedTextInline(width, nblines, tokens, outputEncoding, crop, keepTrailingLines)
 }
 
 // ExportFlattenedNeotex exports tokens to Neotex format.
@@ -384,15 +390,17 @@ func ExportFlattenedTextInline(width, nblines int, tokens []Token, outputEncodin
 //   - effectiveWidth is the VT width after crop
 //
 // If crop is non-nil, the output will be cropped to the specified region.
-func ExportFlattenedNeotex(width, nblines int, tokens []Token, crop *CropRegion) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotex(width, nblines, tokens, crop, false)
+// When keepTrailingLines is true, trailing empty lines are preserved.
+func ExportFlattenedNeotex(width, nblines int, tokens []Token, crop *CropRegion, keepTrailingLines bool) (string, string, int, error) {
+	return exporter.ExportFlattenedNeotex(width, nblines, tokens, crop, keepTrailingLines)
 }
 
 // ExportFlattenedNeotexInline exports tokens to inline Neotex format.
 // This flattens all lines into a single line and adjusts sequence positions.
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
-func ExportFlattenedNeotexInline(width, nblines int, tokens []Token, crop *CropRegion) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens, crop, false)
+// The keepTrailingLines flag is ignored for inline output.
+func ExportFlattenedNeotexInline(width, nblines int, tokens []Token, crop *CropRegion, keepTrailingLines bool) (string, string, int, error) {
+	return exporter.ExportFlattenedNeotexInline(width, nblines, tokens, crop, keepTrailingLines)
 }
 
 // ExportFlattenedNeotexWithSauce exports tokens to Neotex format with SAUCE metadata on the last line.
@@ -402,16 +410,18 @@ func ExportFlattenedNeotexInline(width, nblines int, tokens []Token, crop *CropR
 //   - effectiveWidth is the VT width after crop
 //
 // If sauce is nil, behaves identically to ExportFlattenedNeotex.
-func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotexWithSauce(width, nblines, tokens, crop, sauce, false)
+// When keepTrailingLines is true, trailing empty lines are preserved.
+func ExportFlattenedNeotexWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce, keepTrailingLines bool) (string, string, int, error) {
+	return exporter.ExportFlattenedNeotexWithSauce(width, nblines, tokens, crop, sauce, keepTrailingLines)
 }
 
 // ExportFlattenedNeotexInlineWithSauce exports tokens to inline Neotex format with SAUCE metadata.
 // This flattens all lines into a single line and adjusts sequence positions.
 // Returns (text, sequences, effectiveWidth, error) where effectiveWidth is the VT width after crop.
 // If sauce is nil, behaves identically to ExportFlattenedNeotexInline.
-func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce) (string, string, int, error) {
-	return exporter.ExportFlattenedNeotexInlineWithSauce(width, nblines, tokens, crop, sauce, false)
+// The keepTrailingLines flag is ignored for inline output.
+func ExportFlattenedNeotexInlineWithSauce(width, nblines int, tokens []Token, crop *CropRegion, sauce *Sauce, keepTrailingLines bool) (string, string, int, error) {
+	return exporter.ExportFlattenedNeotexInlineWithSauce(width, nblines, tokens, crop, sauce, keepTrailingLines)
 }
 
 // SGRToNeotex converts an SGR struct to neotex format strings.

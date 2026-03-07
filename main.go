@@ -178,6 +178,13 @@ func main() {
 	if decodedWidth > 0 {
 		cli.Output.Width = decodedWidth
 	}
+	if cli.Output.Lines == 25 {
+		if provider, ok := tok.(interface{ LineCount() int }); ok {
+			if lineCount := provider.LineCount(); lineCount > 0 {
+				cli.Output.Lines = lineCount
+			}
+		}
+	}
 
 	// After tokenizing, check for SAUCE dimensions
 	// Priority: SAUCE > CLI defaults (user can still override with explicit -W/-L)

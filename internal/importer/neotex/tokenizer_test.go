@@ -410,6 +410,18 @@ func TestExtractMetadataPaletteInvalidEntry(t *testing.T) {
 	}
 }
 
+func TestTokenizerLineCountFromMetadata(t *testing.T) {
+	data := []byte("Hello | !V1; !N2/4")
+	_, tokenizer, err := NewNeotexTokenizer(data, 5, false)
+	if err != nil {
+		t.Fatalf("NewNeotexTokenizer failed: %v", err)
+	}
+	_ = tokenizer.Tokenize()
+	if got := tokenizer.LineCount(); got != 4 {
+		t.Fatalf("LineCount: expected 4, got %d", got)
+	}
+}
+
 func TestConvertNeotexToANSI(t *testing.T) {
 	tests := []struct {
 		name      string

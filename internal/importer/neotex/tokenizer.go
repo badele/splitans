@@ -56,6 +56,7 @@ type Tokenizer struct {
 	seqLines   []string         // Lignes de séquences (sans \n)
 	Tokens     []types.Token    `json:"tokens"`
 	Stats      types.TokenStats `json:"stats"`
+	meta       *NeotexMetadata
 	pos        int
 	legacyMode bool
 }
@@ -392,6 +393,7 @@ func (t *Tokenizer) Tokenize() []types.Token {
 		fmt.Fprintf(os.Stderr, "Error parsing neotex metadata: %v\n", err)
 		os.Exit(1)
 	}
+	t.meta = &meta
 
 	// Convert neotex format to ANSI format (for base tokens)
 	ansiData, err := ConvertNeotexToANSI(t.textLines, t.seqLines, meta.Palette, t.legacyMode)
@@ -431,6 +433,21 @@ func (t *Tokenizer) Tokenize() []types.Token {
 // GetStats returns tokenization statistics
 func (t *Tokenizer) GetStats() types.TokenStats {
 	return t.Stats
+}
+
+// LineCount returns the total number of lines from !N metadata.
+// Falls back to NbLines if total Lines is not available.
+func (t *Tokenizer) LineCount() int {
+	if t == nil || t.meta == nil {
+		return 0
+	}
+	if t.meta.Lines > 0 {
+		return t.meta.Lines
+	}
+	if t.meta.NbLines > 0 {
+		return t.meta.NbLines
+	}
+	return 0
 }
 
 // calculateStats recomputes token statistics for the current token list.

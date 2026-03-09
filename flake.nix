@@ -24,7 +24,7 @@
         splitans = pkgs.buildGoModule {
           pname = "splitans";
           # x-release-please-start-version
-          version = "0.10.0";
+          version = "0.10.1";
           # x-release-please-end
           src = ./.;
 

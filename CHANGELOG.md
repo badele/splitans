@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.1](https://github.com/badele/splitans/compare/v0.10.0...v0.10.1) (2026-03-09)
+
+
+### Bug Fixes
+
+* N metadata parsing ([#45](https://github.com/badele/splitans/issues/45)) ([5a5e864](https://github.com/badele/splitans/commit/5a5e864e11a606372dcaa545de216f394e8fccd9))
+* **neotex:** computing !N with -K flag ([#44](https://github.com/badele/splitans/issues/44)) ([92c197c](https://github.com/badele/splitans/commit/92c197c816897c228460988611335b41ac7a6077))
+
+
+### Miscellaneous
+
+* remove release multiple package support ([#42](https://github.com/badele/splitans/issues/42)) ([089c10e](https://github.com/badele/splitans/commit/089c10ec051bb29b80b5bf95d7d7403291cfe758))
+
 ## [0.10.0](https://github.com/badele/splitans/compare/v0.9.0...v0.10.0) (2026-03-05)
 
 

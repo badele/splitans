@@ -6,11 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/alecthomas/kong"
 
 	"github.com/badele/splitans/internal/exporter"
 	exporterhtml "github.com/badele/splitans/internal/exporter/html"
+	"github.com/badele/splitans/internal/importer/neotex"
 	"github.com/badele/splitans/internal/types"
 	"github.com/badele/splitans/pkg/splitans"
 )
@@ -38,6 +41,7 @@ type CLI struct {
 		VGA               bool   `short:"V" help:"Use true VGA colors (not affected by terminal themes)"`
 		Legacy            bool   `short:"L" help:"Use ANSI 1990 legacy mode (no bright backgrounds)"`
 		Sauce             bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
+		Delay             string `short:"d" help:"Output delay: <duration>[:c|:l] (example: 50ms:c, 120ms:l)"`
 	} `embed:"" prefix:"" group:"Output options:"`
 }
 
@@ -71,6 +75,163 @@ func ConcatenateTextAndSequence(leftText, rightText string, leftWidth int, separ
 	return strings.Join(result, "\n")
 }
 
+type delayMode int
+
+const (
+	delayNone delayMode = iota
+	delayChar
+	delayLine
+)
+
+func parseDelayMode(mode string) (delayMode, error) {
+	switch strings.ToLower(mode) {
+	case "c", "char", "character", "chars":
+		return delayChar, nil
+	case "l", "line", "lines":
+		return delayLine, nil
+	case "":
+		return delayChar, nil
+	default:
+		return delayNone, fmt.Errorf("unknown delay mode %q", mode)
+	}
+}
+
+func isDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func parseDelayDuration(value string) (time.Duration, error) {
+	if value == "" {
+		return 0, fmt.Errorf("delay requires a duration")
+	}
+	if isDigits(value) {
+		value += "ms"
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, err
+	}
+	if duration < 0 {
+		return 0, fmt.Errorf("delay must be non-negative")
+	}
+	return duration, nil
+}
+
+func parseDelaySpec(spec string) (time.Duration, delayMode, bool, error) {
+	if spec == "" {
+		return 0, delayNone, false, nil
+	}
+	parts := strings.SplitN(spec, ":", 2)
+	duration, err := parseDelayDuration(parts[0])
+	if err != nil {
+		return 0, delayNone, false, err
+	}
+	mode := ""
+	if len(parts) == 2 {
+		mode = parts[1]
+	}
+	parsedMode, err := parseDelayMode(mode)
+	if err != nil {
+		return 0, delayNone, false, err
+	}
+	return duration, parsedMode, true, nil
+}
+
+func scanAnsiSequence(content string, start int) int {
+	length := len(content)
+	if start+1 >= length {
+		return start + 1
+	}
+	next := content[start+1]
+	switch next {
+	case '[':
+		for i := start + 2; i < length; i++ {
+			b := content[i]
+			if b >= 0x40 && b <= 0x7E {
+				return i + 1
+			}
+		}
+	case ']':
+		for i := start + 2; i < length; i++ {
+			if content[i] == 0x07 {
+				return i + 1
+			}
+			if content[i] == 0x1b && i+1 < length && content[i+1] == '\\' {
+				return i + 2
+			}
+		}
+	case 'P', 'X', '^', '_':
+		for i := start + 2; i < length; i++ {
+			if content[i] == 0x1b && i+1 < length && content[i+1] == '\\' {
+				return i + 2
+			}
+		}
+	default:
+		if start+2 <= length {
+			return start + 2
+		}
+		return length
+	}
+	return length
+}
+
+func writeWithDelay(writer io.Writer, content string, delay time.Duration, mode delayMode) error {
+	if delay <= 0 || mode == delayNone {
+		_, err := writer.Write([]byte(content))
+		return err
+	}
+	switch mode {
+	case delayLine:
+		parts := strings.SplitAfter(content, "\n")
+		for _, part := range parts {
+			if part == "" {
+				continue
+			}
+			if _, err := writer.Write([]byte(part)); err != nil {
+				return err
+			}
+			if strings.HasSuffix(part, "\n") {
+				time.Sleep(delay)
+			}
+		}
+		return nil
+	case delayChar:
+		for i := 0; i < len(content); {
+			if content[i] == 0x1b {
+				end := scanAnsiSequence(content, i)
+				if _, err := writer.Write([]byte(content[i:end])); err != nil {
+					return err
+				}
+				i = end
+				continue
+			}
+			r, size := utf8.DecodeRuneInString(content[i:])
+			if r == utf8.RuneError && size == 1 {
+				size = 1
+			}
+			if _, err := writer.Write([]byte(content[i : i+size])); err != nil {
+				return err
+			}
+			i += size
+			if r != ' ' && r != 0x00 && r != '\u2800' {
+				time.Sleep(delay)
+			}
+		}
+		return nil
+	default:
+		_, err := writer.Write([]byte(content))
+		return err
+	}
+}
+
 func main() {
 	var cli CLI
 	ctx := kong.Parse(&cli,
@@ -84,6 +245,9 @@ func main() {
 	var filename string
 	var encoding string
 	decodedWidth := 0
+	var delayDuration time.Duration
+	var delayMode delayMode
+	var delaySet bool
 
 	/////////////////////////////////////////////////////////////////////////////
 	// Parse argument file or stdin
@@ -175,6 +339,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	delayDuration, delayMode, delaySet, err = parseDelaySpec(cli.Output.Delay)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing delay: %v\n", err)
+		os.Exit(1)
+	}
+
 	if decodedWidth > 0 {
 		cli.Output.Width = decodedWidth
 	}
@@ -182,6 +352,20 @@ func main() {
 		if provider, ok := tok.(interface{ LineCount() int }); ok {
 			if lineCount := provider.LineCount(); lineCount > 0 {
 				cli.Output.Lines = lineCount
+			}
+		}
+	}
+
+	if !delaySet {
+		if provider, ok := tok.(interface{ Metadata() *neotex.NeotexMetadata }); ok {
+			if meta := provider.Metadata(); meta != nil {
+				if meta.DelayCharSet {
+					delayDuration = meta.DelayChar
+					delayMode = delayChar
+				} else if meta.DelayLineSet {
+					delayDuration = meta.DelayLine
+					delayMode = delayLine
+				}
 			}
 		}
 	}
@@ -261,15 +445,21 @@ func main() {
 				os.Exit(1)
 			}
 
-			fmt.Print(string(outputBytes) + saucePart)
+			output := string(outputBytes) + saucePart
+			if err := writeWithDelay(os.Stdout, output, delayDuration, delayMode); err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+				os.Exit(1)
+			}
 		} else {
 			outputBytes, err := splitans.ConvertToEncoding([]byte(ansiOutput), cli.Output.Oencoding)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
 				os.Exit(1)
 			}
-
-			fmt.Print(string(outputBytes))
+			if err := writeWithDelay(os.Stdout, string(outputBytes), delayDuration, delayMode); err != nil {
+				fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+				os.Exit(1)
+			}
 		}
 	// case "neotex":
 	// 	// Neotex format is always UTF-8 (outputEncoding parameter is ignored by ExportFlattenedNeotex)
@@ -312,7 +502,10 @@ func main() {
 		}
 
 		combined := ConcatenateTextAndSequence(plainText, sequenceText, effectiveWidth, " | ")
-		fmt.Println(combined)
+		if err := writeWithDelay(os.Stdout, combined+"\n", delayDuration, delayMode); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+			os.Exit(1)
+		}
 
 	case "json":
 		exporter.TokensJSON(tok)
@@ -356,7 +549,10 @@ func main() {
 			}
 		}
 
-		fmt.Println(string(outputBytes))
+		if err := writeWithDelay(os.Stdout, string(outputBytes)+"\n", delayDuration, delayMode); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+			os.Exit(1)
+		}
 
 	case "html":
 		var plainText, sequenceText string
@@ -390,7 +586,10 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Print(htmlOutput)
+		if err := writeWithDelay(os.Stdout, htmlOutput, delayDuration, delayMode); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+			os.Exit(1)
+		}
 
 	case "html-pack":
 		var plainText, sequenceText string

@@ -48,15 +48,23 @@ curl -s https://termbin.com/w7sp
 curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F json
 curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F table
 curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F stats
+
+# Stream ANSI output with delay (per character or per line)
+cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -d 50ms:c
+cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -d 120ms:l
 ```
 
 ## Neotex Metadata
 
 Metadata entries live in the sequence column and start with `!` (for example
-`!V1.2.0`, `!TW73/80`, `!NL42`, or SAUCE labels like `!STTitle`). Use the short
-form `!KEYvalue` when the value has no separators, and the protected form
-`!KEY<value>` when it contains spaces or characters such as `;`, `,`, or `:`.
-Metadata values must not contain `<` or `>`; those are rejected on import.
+`!V1.2.0`, `!TW73/80`, `!NL42`, `!DC50ms`, `!DL120ms`, or SAUCE labels like
+`!STTitle`). Use the short form `!KEYvalue` when the value has no separators,
+and the protected form `!KEY<value>` when it contains spaces or characters such
+as `;`, `,`, or `:`. Metadata values must not contain `<` or `>`; those are
+rejected on import.
+
+Delay metadata uses `!DC` for per-character delay and `!DL` for per-line delay.
+When `-d/--delay` is not set, splitans uses the delay metadata when present.
 
 ## Output Examples
 

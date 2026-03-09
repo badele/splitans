@@ -435,6 +435,14 @@ func (t *Tokenizer) GetStats() types.TokenStats {
 	return t.Stats
 }
 
+// Metadata exposes parsed neotex metadata.
+func (t *Tokenizer) Metadata() *NeotexMetadata {
+	if t == nil {
+		return nil
+	}
+	return t.meta
+}
+
 // LineCount returns the total number of lines from !N metadata.
 // Falls back to NbLines if total Lines is not available.
 func (t *Tokenizer) LineCount() int {

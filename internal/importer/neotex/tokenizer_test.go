@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/badele/splitans/internal/exporter"
 	"github.com/badele/splitans/internal/types"
@@ -349,24 +348,6 @@ func TestExtractMetadata(t *testing.T) {
 				Extra:        make(map[string]string),
 			},
 		},
-		{
-			name:     "Delay per character",
-			seqLines: []string{"!DC50ms"},
-			expected: NeotexMetadata{
-				DelayChar:    50 * time.Millisecond,
-				DelayCharSet: true,
-				Extra:        make(map[string]string),
-			},
-		},
-		{
-			name:     "Delay per line",
-			seqLines: []string{"!DL120"},
-			expected: NeotexMetadata{
-				DelayLine:    120 * time.Millisecond,
-				DelayLineSet: true,
-				Extra:        make(map[string]string),
-			},
-		},
 	}
 
 	for _, tt := range tests {
@@ -402,26 +383,7 @@ func TestExtractMetadata(t *testing.T) {
 			if meta.Lines != tt.expected.Lines {
 				t.Errorf("Lines: expected %d, got %d", tt.expected.Lines, meta.Lines)
 			}
-			if meta.DelayCharSet != tt.expected.DelayCharSet {
-				t.Errorf("DelayCharSet: expected %t, got %t", tt.expected.DelayCharSet, meta.DelayCharSet)
-			}
-			if meta.DelayLineSet != tt.expected.DelayLineSet {
-				t.Errorf("DelayLineSet: expected %t, got %t", tt.expected.DelayLineSet, meta.DelayLineSet)
-			}
-			if meta.DelayChar != tt.expected.DelayChar {
-				t.Errorf("DelayChar: expected %s, got %s", tt.expected.DelayChar, meta.DelayChar)
-			}
-			if meta.DelayLine != tt.expected.DelayLine {
-				t.Errorf("DelayLine: expected %s, got %s", tt.expected.DelayLine, meta.DelayLine)
-			}
 		})
-	}
-}
-
-func TestExtractMetadataDelayConflict(t *testing.T) {
-	_, err := ExtractMetadata([]string{"!DC50; !DL100"})
-	if err == nil {
-		t.Fatal("expected delay metadata conflict to return error")
 	}
 }
 

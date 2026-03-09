@@ -28,39 +28,6 @@ type NeotexMetadata struct {
 	Extra        map[string]string // Other metadata (!key:value)
 	Sauce        *types.Sauce      // SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
 	Palette      map[int]types.ColorValue
-	DelayChar    time.Duration
-	DelayLine    time.Duration
-	DelayCharSet bool
-	DelayLineSet bool
-}
-
-func isDigits(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, ch := range value {
-		if ch < '0' || ch > '9' {
-			return false
-		}
-	}
-	return true
-}
-
-func parseDelayValue(value string) (time.Duration, error) {
-	if value == "" {
-		return 0, fmt.Errorf("neotex delay metadata requires a value")
-	}
-	if isDigits(value) {
-		value += "ms"
-	}
-	parsed, err := time.ParseDuration(value)
-	if err != nil {
-		return 0, fmt.Errorf("invalid neotex delay value %q", value)
-	}
-	if parsed < 0 {
-		return 0, fmt.Errorf("neotex delay value must be non-negative")
-	}
-	return parsed, nil
 }
 
 func validateNeotexLabelValue(key, value string) error {
@@ -251,38 +218,6 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 					meta.NbLines = v
 					meta.Lines = v
 				}
-				continue
-			}
-
-			if dValue, ok, err := parseNeotexLabel(entry, "DC"); ok {
-				if err != nil {
-					return meta, err
-				}
-				if meta.DelayLineSet {
-					return meta, fmt.Errorf("neotex metadata cannot combine !DC and !DL")
-				}
-				delay, err := parseDelayValue(dValue)
-				if err != nil {
-					return meta, err
-				}
-				meta.DelayChar = delay
-				meta.DelayCharSet = true
-				continue
-			}
-
-			if dValue, ok, err := parseNeotexLabel(entry, "DL"); ok {
-				if err != nil {
-					return meta, err
-				}
-				if meta.DelayCharSet {
-					return meta, fmt.Errorf("neotex metadata cannot combine !DC and !DL")
-				}
-				delay, err := parseDelayValue(dValue)
-				if err != nil {
-					return meta, err
-				}
-				meta.DelayLine = delay
-				meta.DelayLineSet = true
 				continue
 			}
 

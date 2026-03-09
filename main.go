@@ -13,7 +13,6 @@ import (
 
 	"github.com/badele/splitans/internal/exporter"
 	exporterhtml "github.com/badele/splitans/internal/exporter/html"
-	"github.com/badele/splitans/internal/importer/neotex"
 	"github.com/badele/splitans/internal/types"
 	"github.com/badele/splitans/pkg/splitans"
 )
@@ -125,14 +124,14 @@ func parseDelayDuration(value string) (time.Duration, error) {
 	return duration, nil
 }
 
-func parseDelaySpec(spec string) (time.Duration, delayMode, bool, error) {
+func parseDelaySpec(spec string) (time.Duration, delayMode, error) {
 	if spec == "" {
-		return 0, delayNone, false, nil
+		return 0, delayNone, nil
 	}
 	parts := strings.SplitN(spec, ":", 2)
 	duration, err := parseDelayDuration(parts[0])
 	if err != nil {
-		return 0, delayNone, false, err
+		return 0, delayNone, err
 	}
 	mode := ""
 	if len(parts) == 2 {
@@ -140,9 +139,9 @@ func parseDelaySpec(spec string) (time.Duration, delayMode, bool, error) {
 	}
 	parsedMode, err := parseDelayMode(mode)
 	if err != nil {
-		return 0, delayNone, false, err
+		return 0, delayNone, err
 	}
-	return duration, parsedMode, true, nil
+	return duration, parsedMode, nil
 }
 
 func scanAnsiSequence(content string, start int) int {
@@ -247,7 +246,6 @@ func main() {
 	decodedWidth := 0
 	var delayDuration time.Duration
 	var delayMode delayMode
-	var delaySet bool
 
 	/////////////////////////////////////////////////////////////////////////////
 	// Parse argument file or stdin
@@ -339,7 +337,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	delayDuration, delayMode, delaySet, err = parseDelaySpec(cli.Output.Delay)
+	delayDuration, delayMode, err = parseDelaySpec(cli.Output.Delay)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing delay: %v\n", err)
 		os.Exit(1)
@@ -352,20 +350,6 @@ func main() {
 		if provider, ok := tok.(interface{ LineCount() int }); ok {
 			if lineCount := provider.LineCount(); lineCount > 0 {
 				cli.Output.Lines = lineCount
-			}
-		}
-	}
-
-	if !delaySet {
-		if provider, ok := tok.(interface{ Metadata() *neotex.NeotexMetadata }); ok {
-			if meta := provider.Metadata(); meta != nil {
-				if meta.DelayCharSet {
-					delayDuration = meta.DelayChar
-					delayMode = delayChar
-				} else if meta.DelayLineSet {
-					delayDuration = meta.DelayLine
-					delayMode = delayLine
-				}
 			}
 		}
 	}

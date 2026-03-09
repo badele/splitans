@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/badele/splitans/compare/v0.10.1...v0.11.0) (2026-03-09)
+
+
+### Features
+
+* add output delay ([#46](https://github.com/badele/splitans/issues/46)) ([2adfb40](https://github.com/badele/splitans/commit/2adfb40b617ffc944bd70f44bdd243faaa7ce4f7))
+
 ## [0.10.1](https://github.com/badele/splitans/compare/v0.10.0...v0.10.1) (2026-03-09)
 
 

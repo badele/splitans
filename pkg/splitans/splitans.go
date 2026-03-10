@@ -435,14 +435,14 @@ func DiffSGRToNeotex(current, previous *SGR) []string {
 }
 
 // ExportToNeotex exports VirtualTerminal buffer to neotex format with differential encoding.
-// Returns (text, sequences) where text is plain content and sequences contains position-based style codes.
-func ExportToNeotex(vt *VirtualTerminal) (string, string) {
+// Returns (text, sequences, error) where text is plain content and sequences contains position-based style codes.
+func ExportToNeotex(vt *VirtualTerminal) (string, string, error) {
 	return exporter.ExportToNeotex(vt)
 }
 
 // ExportToInlineNeotex exports VirtualTerminal buffer to inline neotex format.
 // All lines are flattened into a single line with adjusted sequence positions.
-// Returns (text, sequences) where text is plain content and sequences contains position-based style codes.
-func ExportToInlineNeotex(vt *VirtualTerminal) (string, string) {
+// Returns (text, sequences, error) where text is plain content and sequences contains position-based style codes.
+func ExportToInlineNeotex(vt *VirtualTerminal) (string, string, error) {
 	return exporter.ExportToInlineNeotex(vt)
 }

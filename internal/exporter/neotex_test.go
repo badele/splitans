@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -65,7 +66,10 @@ func TestExportToNeotexWithHyperlinks(t *testing.T) {
 		t.Fatalf("unexpected apply error: %v", err)
 	}
 
-	_, sequences := ExportToNeotex(vt)
+	_, sequences, err := ExportToNeotex(vt)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
 
 	// Should contain hyperlink codes
 	if !strings.Contains(sequences, "HL:<https://example.com>") {
@@ -91,7 +95,10 @@ func TestHyperlinkRoundTrip(t *testing.T) {
 	}
 
 	// Export to neotext
-	text, sequences := ExportToNeotex(vt)
+	text, sequences, err := ExportToNeotex(vt)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
 
 	// Verify neotext output contains hyperlink codes
 	if !strings.Contains(sequences, "HL:<https://example.com>") {
@@ -132,7 +139,10 @@ func TestExportToInlineNeotex(t *testing.T) {
 		t.Fatalf("unexpected apply error: %v", err)
 	}
 
-	text, sequences := ExportToInlineNeotex(vt)
+	text, sequences, err := ExportToInlineNeotex(vt)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
 
 	if text != "ABCDEF  " {
 		t.Fatalf("unexpected inline text: got %q", text)
@@ -159,6 +169,60 @@ func TestExportFlattenedNeotexPreservesTrailingLines(t *testing.T) {
 	}
 	if !strings.Contains(sequences, "!N1/3") {
 		t.Fatalf("expected sequences to include !N1/3, got %q", sequences)
+	}
+}
+
+func TestExportToNeotexPalettizesRGB(t *testing.T) {
+	vt := processor.NewVirtualTerminal(6, 1, "utf8", false, false)
+
+	tokens := []types.Token{
+		{Type: types.TokenSGR, Parameters: []string{"38", "2", "255", "0", "128"}},
+		{Type: types.TokenText, Value: "A"},
+		{Type: types.TokenSGR, Parameters: []string{"48", "2", "0", "255", "0"}},
+		{Type: types.TokenText, Value: "B"},
+		{Type: types.TokenSGR, Parameters: []string{"38", "2", "255", "0", "128"}},
+		{Type: types.TokenText, Value: "C"},
+	}
+
+	if err := vt.ApplyTokens(tokens); err != nil {
+		t.Fatalf("unexpected apply error: %v", err)
+	}
+
+	_, sequences, err := ExportToNeotex(vt)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
+
+	if !strings.Contains(sequences, "!P1=#FF0080") {
+		t.Fatalf("expected palette entry for first color, got %q", sequences)
+	}
+	if !strings.Contains(sequences, "!P2=#00FF00") {
+		t.Fatalf("expected palette entry for second color, got %q", sequences)
+	}
+	if !strings.Contains(sequences, "FP1") {
+		t.Fatalf("expected foreground palette code, got %q", sequences)
+	}
+	if !strings.Contains(sequences, "BP2") {
+		t.Fatalf("expected background palette code, got %q", sequences)
+	}
+
+	paletteIdx := strings.Index(sequences, "!P1=")
+	posIdx := strings.Index(sequences, "1:")
+	if paletteIdx == -1 || posIdx == -1 || paletteIdx > posIdx {
+		t.Fatalf("expected palette metadata before position entries, got %q", sequences)
+	}
+
+	rawRGB := regexp.MustCompile(`(?:^|[,:;\s])([FB][0-9A-Fa-f]{6})`)
+	if rawRGB.MatchString(sequences) {
+		t.Fatalf("expected RGB codes to be palettized, got %q", sequences)
+	}
+}
+
+func TestPaletizeNeotexSequencesRejectsPaletteZero(t *testing.T) {
+	sequences := "!P0=#FF00FF; 1:FP1"
+	_, err := paletizeNeotexSequences(sequences)
+	if err == nil {
+		t.Fatalf("expected palette index 0 error")
 	}
 }
 

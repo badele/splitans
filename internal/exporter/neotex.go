@@ -2,6 +2,7 @@ package exporter
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -256,16 +257,16 @@ func DiffSGRToNeotex(current, previous *types.SGR) []string {
 }
 
 // ExportToNeotex exports processor.VirtualTerminal buffer to neotex format with differential encoding.
-// Returns (text, sequences) where:
+// Returns (text, sequences, error) where:
 // - text is the plain text content
 // - sequences is the neotex format sequences with positions (per line)
 // Uses differential encoding to minimize the number of codes by only outputting changes.
-func ExportToNeotex(vt *processor.VirtualTerminal) (string, string) {
+func ExportToNeotex(vt *processor.VirtualTerminal) (string, string, error) {
 	return exportToNeotex(vt, false, false)
 }
 
 // ExportToInlineNeotex exports the buffer to neotex format, flattening all lines into one.
-func ExportToInlineNeotex(vt *processor.VirtualTerminal) (string, string) {
+func ExportToInlineNeotex(vt *processor.VirtualTerminal) (string, string, error) {
 	return exportToNeotex(vt, true, false)
 }
 
@@ -489,7 +490,7 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 	}}
 }
 
-func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing bool) (string, string) {
+func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing bool) (string, string, error) {
 	lines := vt.ExportSplitTextAndSequences(keepTrailing && !inline)
 	buffer := vt.GetBuffer()
 
@@ -498,7 +499,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing boo
 	}
 
 	if len(lines) == 0 {
-		return "", ""
+		return "", "", nil
 	}
 
 	var textBuilder strings.Builder
@@ -655,7 +656,16 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing boo
 		}
 	}
 
-	return textBuilder.String(), seqBuilder.String()
+	sequences := seqBuilder.String()
+	if sequences != "" {
+		var err error
+		sequences, err = paletizeNeotexSequences(sequences)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	return textBuilder.String(), sequences, nil
 }
 
 func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool, crop *types.CropRegion, keepTrailing bool) (string, string, int, error) {
@@ -677,9 +687,17 @@ func exportFlattenedNeotex(width, nblines int, tokens []types.Token, inline bool
 
 	var text, sequences string
 	if inline {
-		text, sequences = exportToNeotex(vt, true, false)
+		var err error
+		text, sequences, err = exportToNeotex(vt, true, false)
+		if err != nil {
+			return "", "", 0, err
+		}
 	} else {
-		text, sequences = exportToNeotex(vt, false, keepTrailing)
+		var err error
+		text, sequences, err = exportToNeotex(vt, false, keepTrailing)
+		if err != nil {
+			return "", "", 0, err
+		}
 	}
 
 	return text, sequences, effectiveWidth, nil
@@ -709,9 +727,17 @@ func exportFlattenedNeotexWithSauce(width, nblines int, tokens []types.Token, in
 
 	var text, sequences string
 	if inline {
-		text, sequences = exportToNeotex(vt, true, false)
+		var err error
+		text, sequences, err = exportToNeotex(vt, true, false)
+		if err != nil {
+			return "", "", 0, err
+		}
 	} else {
-		text, sequences = exportToNeotex(vt, false, keepTrailing)
+		var err error
+		text, sequences, err = exportToNeotex(vt, false, keepTrailing)
+		if err != nil {
+			return "", "", 0, err
+		}
 	}
 
 	// Append SAUCE line: empty text line + SAUCE labels
@@ -753,4 +779,195 @@ func getTokenTypeName(tokenType types.TokenType) string {
 	default:
 		return "UNKNOWN"
 	}
+}
+
+func paletizeNeotexSequences(sequences string) (string, error) {
+	if sequences == "" {
+		return "", nil
+	}
+
+	lines := strings.Split(sequences, "\n")
+	palette := make(map[string]int)
+	paletteOrder := make([]string, 0)
+	parsedLines := make([][]string, len(lines))
+
+	for i, line := range lines {
+		entries := splitNeotexEntries(line)
+		lineEntries := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			trimmed := strings.TrimSpace(entry)
+			if trimmed == "" {
+				continue
+			}
+			if strings.HasPrefix(trimmed, "!") {
+				if err := rejectPaletteZero(trimmed); err != nil {
+					return "", err
+				}
+				lineEntries = append(lineEntries, trimmed)
+				continue
+			}
+
+			parts := strings.SplitN(trimmed, ":", 2)
+			if len(parts) != 2 {
+				lineEntries = append(lineEntries, trimmed)
+				continue
+			}
+			posPart := strings.TrimSpace(parts[0])
+			stylesStr := strings.TrimSpace(parts[1])
+			if stylesStr == "" {
+				lineEntries = append(lineEntries, fmt.Sprintf("%s:", posPart))
+				continue
+			}
+			styles := strings.Split(stylesStr, ",")
+			converted := make([]string, 0, len(styles))
+			for _, style := range styles {
+				style = strings.TrimSpace(style)
+				if style == "" {
+					continue
+				}
+				prefix, hex, ok := parseRGBNeotexCode(style)
+				if ok {
+					idx, exists := palette[hex]
+					if !exists {
+						idx = len(paletteOrder) + 1
+						palette[hex] = idx
+						paletteOrder = append(paletteOrder, hex)
+					}
+					style = fmt.Sprintf("%cP%d", prefix, idx)
+				}
+				converted = append(converted, style)
+			}
+			if len(converted) > 0 {
+				lineEntries = append(lineEntries, fmt.Sprintf("%s:%s", posPart, strings.Join(converted, ", ")))
+			}
+		}
+		parsedLines[i] = lineEntries
+	}
+
+	if len(paletteOrder) > 0 && len(parsedLines) > 0 {
+		paletteEntries := make([]string, len(paletteOrder))
+		for idx, hex := range paletteOrder {
+			paletteEntries[idx] = fmt.Sprintf("!P%d=#%s", idx+1, hex)
+		}
+		lineEntries := parsedLines[0]
+		insertPos := 0
+		for insertPos < len(lineEntries) && strings.HasPrefix(lineEntries[insertPos], "!") {
+			insertPos++
+		}
+		newEntries := make([]string, 0, len(lineEntries)+len(paletteEntries))
+		newEntries = append(newEntries, lineEntries[:insertPos]...)
+		newEntries = append(newEntries, paletteEntries...)
+		newEntries = append(newEntries, lineEntries[insertPos:]...)
+		parsedLines[0] = newEntries
+	}
+
+	var builder strings.Builder
+	for i, entries := range parsedLines {
+		if len(entries) > 0 {
+			builder.WriteString(strings.Join(entries, "; "))
+		}
+		if i < len(parsedLines)-1 {
+			builder.WriteString("\n")
+		}
+	}
+
+	return builder.String(), nil
+}
+
+func parseRGBNeotexCode(style string) (byte, string, bool) {
+	if len(style) != 7 {
+		return 0, "", false
+	}
+	prefix := style[0]
+	if prefix == 'f' {
+		prefix = 'F'
+	} else if prefix == 'b' {
+		prefix = 'B'
+	}
+	if prefix != 'F' && prefix != 'B' {
+		return 0, "", false
+	}
+	if !isHexString(style[1:]) {
+		return 0, "", false
+	}
+	return prefix, strings.ToUpper(style[1:]), true
+}
+
+func isHexString(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		b := value[i]
+		if (b < '0' || b > '9') && (b < 'A' || b > 'F') && (b < 'a' || b > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func rejectPaletteZero(entry string) error {
+	if !strings.HasPrefix(entry, "!P") {
+		return nil
+	}
+	idxStart := 2
+	idxEnd := idxStart
+	for idxEnd < len(entry) {
+		b := entry[idxEnd]
+		if b < '0' || b > '9' {
+			break
+		}
+		idxEnd++
+	}
+	if idxEnd == idxStart {
+		return nil
+	}
+	idx, err := strconv.Atoi(entry[idxStart:idxEnd])
+	if err != nil {
+		return nil
+	}
+	if idx == 0 {
+		return fmt.Errorf("neotex palette index 0 is not allowed")
+	}
+	return nil
+}
+
+func splitNeotexEntries(seqLine string) []string {
+	if seqLine == "" {
+		return nil
+	}
+
+	entries := make([]string, 0)
+	var buf strings.Builder
+	inAngle := false
+
+	for _, r := range seqLine {
+		switch r {
+		case '<':
+			inAngle = true
+			buf.WriteRune(r)
+		case '>':
+			inAngle = false
+			buf.WriteRune(r)
+		case ';':
+			if inAngle {
+				buf.WriteRune(r)
+				continue
+			}
+			entry := strings.TrimSpace(buf.String())
+			if entry != "" {
+				entries = append(entries, entry)
+			}
+			buf.Reset()
+		default:
+			buf.WriteRune(r)
+		}
+	}
+
+	entry := strings.TrimSpace(buf.String())
+	if entry != "" {
+		entries = append(entries, entry)
+	}
+
+	return entries
 }

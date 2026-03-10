@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.0](https://github.com/badele/splitans/compare/v0.11.0...v0.12.0) (2026-03-10)
+
+
+### Features
+
+* add paletizer feature ([2ff18be](https://github.com/badele/splitans/commit/2ff18be8992e1686acb52f0e0378accd4e27b59c))
+* remove !DC and !DS neotex delay metadata ([#48](https://github.com/badele/splitans/issues/48)) ([1722747](https://github.com/badele/splitans/commit/172274788263046a108d6f64425b8754d8b5bd58))
+* use sharp on metadata color ([#50](https://github.com/badele/splitans/issues/50)) ([12db65f](https://github.com/badele/splitans/commit/12db65fad5da95f5fbb8de078f4ab768c1fecade))
+
 ## [0.11.0](https://github.com/badele/splitans/compare/v0.10.1...v0.11.0) (2026-03-09)
 
 

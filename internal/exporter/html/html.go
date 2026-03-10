@@ -400,6 +400,9 @@ const baseJS = `  const palette = [
       }
       value = value.slice(1, -1);
     }
+    if (value.startsWith('#')) {
+      value = value.slice(1);
+    }
     if (!/^[0-9A-Fa-f]{6}$/.test(value)) {
       throw new Error('Invalid palette value: ' + value);
     }

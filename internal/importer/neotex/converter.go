@@ -122,6 +122,9 @@ func parsePaletteEntry(token string) (int, types.ColorValue, bool, error) {
 	if strings.ContainsAny(value, "<>") {
 		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry has invalid brackets")
 	}
+	if strings.HasPrefix(value, "#") {
+		value = value[1:]
+	}
 	if len(value) != 6 {
 		return 0, types.ColorValue{}, true, fmt.Errorf("neotex palette entry must be 6 hex digits")
 	}

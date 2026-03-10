@@ -402,6 +402,36 @@ func TestExtractMetadataPalette(t *testing.T) {
 	}
 }
 
+func TestExtractMetadataPaletteWithHash(t *testing.T) {
+	seqLines := []string{"!P2=#FF0080; 1:Fr"}
+	meta, err := ExtractMetadata(seqLines)
+	if err != nil {
+		t.Fatalf("ExtractMetadata failed: %v", err)
+	}
+	color, ok := meta.Palette[2]
+	if !ok {
+		t.Fatalf("expected palette index 2 to be parsed")
+	}
+	if color.R != 0xFF || color.G != 0x00 || color.B != 0x80 {
+		t.Fatalf("unexpected palette color: %d %d %d", color.R, color.G, color.B)
+	}
+}
+
+func TestExtractMetadataPaletteWithHashBrackets(t *testing.T) {
+	seqLines := []string{"!P2=<#FF0080>; 1:Fr"}
+	meta, err := ExtractMetadata(seqLines)
+	if err != nil {
+		t.Fatalf("ExtractMetadata failed: %v", err)
+	}
+	color, ok := meta.Palette[2]
+	if !ok {
+		t.Fatalf("expected palette index 2 to be parsed")
+	}
+	if color.R != 0xFF || color.G != 0x00 || color.B != 0x80 {
+		t.Fatalf("unexpected palette color: %d %d %d", color.R, color.G, color.B)
+	}
+}
+
 func TestExtractMetadataPaletteInvalidEntry(t *testing.T) {
 	seqLines := []string{"!P2<FF0080>; 1:Fr"}
 	_, err := ExtractMetadata(seqLines)

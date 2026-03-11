@@ -10,6 +10,17 @@ import (
 	"github.com/badele/splitans/internal/types"
 )
 
+const (
+	NeotexDelayChar = "char"
+	NeotexDelayLine = "line"
+)
+
+type NeotexDelayChange struct {
+	Line     int
+	Duration time.Duration
+	Mode     string
+}
+
 // NeotexMetadata contains metadata extracted from neotex format
 type NeotexMetadata struct {
 	// VersionRaw stores the raw version string after !V (e.g., "1.23")
@@ -21,13 +32,17 @@ type NeotexMetadata struct {
 	VersionMinor int
 	VersionPatch int
 
-	TrimmedWidth int               // Trimmed width (!W73/80 -> 73)
-	Width        int               // Total width (!W73/80 -> 80)
-	NbLines      int               // Trimmed lines (!N10/25 -> 10)
-	Lines        int               // Total lines (!N10/25 -> 25)
-	Extra        map[string]string // Other metadata (!key:value)
-	Sauce        *types.Sauce      // SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
-	Palette      map[int]types.ColorValue
+	TrimmedWidth  int               // Trimmed width (!W73/80 -> 73)
+	Width         int               // Total width (!W73/80 -> 80)
+	NbLines       int               // Trimmed lines (!N10/25 -> 10)
+	Lines         int               // Total lines (!N10/25 -> 25)
+	Extra         map[string]string // Other metadata (!key:value)
+	Sauce         *types.Sauce      // SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
+	Palette       map[int]types.ColorValue
+	DelayDuration time.Duration
+	DelayMode     string
+	DelayExplicit bool
+	DelayChanges  []NeotexDelayChange
 }
 
 func validateNeotexLabelValue(key, value string) error {
@@ -135,6 +150,53 @@ func parsePaletteEntry(token string) (int, types.ColorValue, bool, error) {
 	return idx, types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}, true, nil
 }
 
+func isDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, ch := range value {
+		if ch < '0' || ch > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func parseNeotexDelayValue(value string) (time.Duration, error) {
+	if value == "" {
+		return 0, fmt.Errorf("neotex delay requires a value")
+	}
+	if isDigits(value) {
+		value += "ms"
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("invalid neotex delay value %q", value)
+	}
+	if duration < 0 {
+		return 0, fmt.Errorf("neotex delay must be non-negative")
+	}
+	return duration, nil
+}
+
+func parseNeotexDelayCode(code string) (time.Duration, string, bool, error) {
+	if strings.HasPrefix(code, "DC") {
+		duration, err := parseNeotexDelayValue(strings.TrimSpace(code[2:]))
+		if err != nil {
+			return 0, "", true, err
+		}
+		return duration, NeotexDelayChar, true, nil
+	}
+	if strings.HasPrefix(code, "DL") {
+		duration, err := parseNeotexDelayValue(strings.TrimSpace(code[2:]))
+		if err != nil {
+			return 0, "", true, err
+		}
+		return duration, NeotexDelayLine, true, nil
+	}
+	return 0, "", false, nil
+}
+
 // ExtractMetadata extracts metadata from sequence lines
 // Metadata entries start with '!' (e.g., !V1 for version)
 // Also extracts SAUCE metadata if present (!SAUCE, !ST, !SA, etc.)
@@ -144,15 +206,53 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 		Extra:   make(map[string]string),
 		Palette: make(map[int]types.ColorValue),
 	}
+	var delayExplicit bool
+	var delayDuration time.Duration
+	var delayMode string
 
 	// Collect all tokens for SAUCE parsing
 	var allTokens []string
 
-	for _, seqLine := range seqLines {
+	var delayChanges []NeotexDelayChange
+
+	for lineIdx, seqLine := range seqLines {
 		entries := splitNeotexEntries(seqLine)
 		for _, entry := range entries {
 			entry = strings.TrimSpace(entry)
+			if entry == "" {
+				continue
+			}
 			if !strings.HasPrefix(entry, "!") {
+				parts := strings.SplitN(entry, ":", 2)
+				if len(parts) != 2 {
+					continue
+				}
+				stylesStr := strings.TrimSpace(parts[1])
+				styleList := strings.Split(stylesStr, ",")
+				for _, style := range styleList {
+					style = strings.TrimSpace(style)
+					if style == "" {
+						continue
+					}
+					duration, mode, ok, err := parseNeotexDelayCode(style)
+					if err != nil {
+						return meta, err
+					}
+					if !ok {
+						continue
+					}
+					delayExplicit = true
+					if duration == 0 {
+						mode = ""
+					}
+					delayDuration = duration
+					delayMode = mode
+					delayChanges = append(delayChanges, NeotexDelayChange{
+						Line:     lineIdx,
+						Duration: duration,
+						Mode:     mode,
+					})
+				}
 				continue
 			}
 
@@ -252,6 +352,13 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 		} else if meta.NbLines > 0 {
 			meta.Sauce.TInfo2 = uint16(meta.NbLines)
 		}
+	}
+
+	if delayExplicit {
+		meta.DelayExplicit = true
+		meta.DelayDuration = delayDuration
+		meta.DelayMode = delayMode
+		meta.DelayChanges = delayChanges
 	}
 
 	return meta, nil

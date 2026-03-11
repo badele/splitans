@@ -13,6 +13,7 @@ import (
 
 	"github.com/badele/splitans/internal/exporter"
 	exporterhtml "github.com/badele/splitans/internal/exporter/html"
+	"github.com/badele/splitans/internal/importer/neotex"
 	"github.com/badele/splitans/internal/types"
 	"github.com/badele/splitans/pkg/splitans"
 )
@@ -40,7 +41,8 @@ type CLI struct {
 		VGA               bool   `short:"V" help:"Use true VGA colors (not affected by terminal themes)"`
 		Legacy            bool   `short:"L" help:"Use ANSI 1990 legacy mode (no bright backgrounds)"`
 		Sauce             bool   `short:"S" help:"Include SAUCE metadata in output (ANSI: binary record, Neotex: labels)"`
-		Delay             string `short:"d" help:"Output delay: <duration>[:c|:l] (example: 50ms:c, 120ms:l)"`
+		Delay             string `short:"D" help:"Output delay: <duration>[:c|:l] (example: 50ms:c, 120ms:l)"`
+		DelayDeprecated   string `short:"d" hidden:"" help:"Deprecated alias for -D"`
 	} `embed:"" prefix:"" group:"Output options:"`
 }
 
@@ -81,6 +83,12 @@ const (
 	delayChar
 	delayLine
 )
+
+type delayChange struct {
+	line     int
+	duration time.Duration
+	mode     delayMode
+}
 
 func parseDelayMode(mode string) (delayMode, error) {
 	switch strings.ToLower(mode) {
@@ -142,6 +150,31 @@ func parseDelaySpec(spec string) (time.Duration, delayMode, error) {
 		return 0, delayNone, err
 	}
 	return duration, parsedMode, nil
+}
+
+func buildDelaySchedule(meta *neotex.NeotexMetadata) []delayChange {
+	if meta == nil || len(meta.DelayChanges) == 0 {
+		return nil
+	}
+
+	schedule := make([]delayChange, 0, len(meta.DelayChanges))
+	for _, change := range meta.DelayChanges {
+		mode := delayNone
+		switch change.Mode {
+		case neotex.NeotexDelayChar:
+			mode = delayChar
+		case neotex.NeotexDelayLine:
+			mode = delayLine
+		}
+		duration := change.Duration
+		if duration <= 0 {
+			duration = 0
+			mode = delayNone
+		}
+		schedule = append(schedule, delayChange{line: change.Line, duration: duration, mode: mode})
+	}
+
+	return schedule
 }
 
 func scanAnsiSequence(content string, start int) int {
@@ -231,6 +264,41 @@ func writeWithDelay(writer io.Writer, content string, delay time.Duration, mode 
 	}
 }
 
+func writeWithDelaySchedule(writer io.Writer, content string, schedule []delayChange) error {
+	if len(schedule) == 0 {
+		_, err := writer.Write([]byte(content))
+		return err
+	}
+
+	lines := strings.SplitAfter(content, "\n")
+	currentDuration := time.Duration(0)
+	currentMode := delayNone
+	scheduleIdx := 0
+
+	for lineIdx, line := range lines {
+		if line == "" {
+			continue
+		}
+		for scheduleIdx < len(schedule) && schedule[scheduleIdx].line == lineIdx {
+			currentDuration = schedule[scheduleIdx].duration
+			currentMode = schedule[scheduleIdx].mode
+			scheduleIdx++
+		}
+		if err := writeWithDelay(writer, line, currentDuration, currentMode); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func writeOutputWithDelay(writer io.Writer, content string, delay time.Duration, mode delayMode, schedule []delayChange) error {
+	if len(schedule) > 0 {
+		return writeWithDelaySchedule(writer, content, schedule)
+	}
+	return writeWithDelay(writer, content, delay, mode)
+}
+
 func main() {
 	var cli CLI
 	ctx := kong.Parse(&cli,
@@ -246,6 +314,7 @@ func main() {
 	decodedWidth := 0
 	var delayDuration time.Duration
 	var delayMode delayMode
+	var delaySchedule []delayChange
 
 	/////////////////////////////////////////////////////////////////////////////
 	// Parse argument file or stdin
@@ -337,10 +406,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	delayDuration, delayMode, err = parseDelaySpec(cli.Output.Delay)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing delay: %v\n", err)
-		os.Exit(1)
+	delaySpec := cli.Output.Delay
+	if cli.Output.Delay != "" && cli.Output.DelayDeprecated != "" {
+		fmt.Fprintln(os.Stderr, "Warning: -d is deprecated and ignored because -D is set.")
+	}
+	if delaySpec == "" && cli.Output.DelayDeprecated != "" {
+		delaySpec = cli.Output.DelayDeprecated
+		fmt.Fprintln(os.Stderr, "Warning: -d is deprecated; use -D instead.")
+	}
+	if delaySpec != "" {
+		delayDuration, delayMode, err = parseDelaySpec(delaySpec)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing delay: %v\n", err)
+			os.Exit(1)
+		}
+	} else if provider, ok := tok.(interface{ Metadata() *neotex.NeotexMetadata }); ok {
+		if meta := provider.Metadata(); meta != nil && meta.DelayExplicit {
+			delaySchedule = buildDelaySchedule(meta)
+			if len(delaySchedule) == 0 {
+				delayDuration = meta.DelayDuration
+				switch meta.DelayMode {
+				case neotex.NeotexDelayLine:
+					delayMode = delayLine
+				case neotex.NeotexDelayChar:
+					delayMode = delayChar
+				default:
+					delayMode = delayNone
+				}
+				if delayDuration <= 0 {
+					delayDuration = 0
+					delayMode = delayNone
+				}
+			}
+		}
 	}
 
 	if decodedWidth > 0 {
@@ -430,7 +528,7 @@ func main() {
 			}
 
 			output := string(outputBytes) + saucePart
-			if err := writeWithDelay(os.Stdout, output, delayDuration, delayMode); err != nil {
+			if err := writeOutputWithDelay(os.Stdout, output, delayDuration, delayMode, delaySchedule); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 				os.Exit(1)
 			}
@@ -440,7 +538,7 @@ func main() {
 				fmt.Fprintf(os.Stderr, "Error converting to output encoding: %v\n", err)
 				os.Exit(1)
 			}
-			if err := writeWithDelay(os.Stdout, string(outputBytes), delayDuration, delayMode); err != nil {
+			if err := writeOutputWithDelay(os.Stdout, string(outputBytes), delayDuration, delayMode, delaySchedule); err != nil {
 				fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 				os.Exit(1)
 			}
@@ -486,7 +584,7 @@ func main() {
 		}
 
 		combined := ConcatenateTextAndSequence(plainText, sequenceText, effectiveWidth, " | ")
-		if err := writeWithDelay(os.Stdout, combined+"\n", delayDuration, delayMode); err != nil {
+		if err := writeOutputWithDelay(os.Stdout, combined+"\n", delayDuration, delayMode, delaySchedule); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 			os.Exit(1)
 		}
@@ -533,7 +631,7 @@ func main() {
 			}
 		}
 
-		if err := writeWithDelay(os.Stdout, string(outputBytes)+"\n", delayDuration, delayMode); err != nil {
+		if err := writeOutputWithDelay(os.Stdout, string(outputBytes)+"\n", delayDuration, delayMode, delaySchedule); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 			os.Exit(1)
 		}
@@ -570,7 +668,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		if err := writeWithDelay(os.Stdout, htmlOutput, delayDuration, delayMode); err != nil {
+		if err := writeOutputWithDelay(os.Stdout, htmlOutput, delayDuration, delayMode, delaySchedule); err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 			os.Exit(1)
 		}

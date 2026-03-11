@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/badele/splitans/internal/exporter"
 	"github.com/badele/splitans/internal/types"
@@ -382,6 +383,95 @@ func TestExtractMetadata(t *testing.T) {
 			}
 			if meta.Lines != tt.expected.Lines {
 				t.Errorf("Lines: expected %d, got %d", tt.expected.Lines, meta.Lines)
+			}
+		})
+	}
+}
+
+func TestExtractMetadataDelaySequences(t *testing.T) {
+	tests := []struct {
+		name           string
+		seqLines       []string
+		expectExplicit bool
+		expectDuration time.Duration
+		expectMode     string
+		expectLines    []int
+	}{
+		{
+			name:           "Delay char numeric",
+			seqLines:       []string{"1:DC20"},
+			expectExplicit: true,
+			expectDuration: 20 * time.Millisecond,
+			expectMode:     NeotexDelayChar,
+			expectLines:    []int{0},
+		},
+		{
+			name:           "Delay line duration",
+			seqLines:       []string{"1:DL120ms"},
+			expectExplicit: true,
+			expectDuration: 120 * time.Millisecond,
+			expectMode:     NeotexDelayLine,
+			expectLines:    []int{0},
+		},
+		{
+			name:           "Delay disabled",
+			seqLines:       []string{"1:DC0"},
+			expectExplicit: true,
+			expectDuration: 0,
+			expectMode:     "",
+			expectLines:    []int{0},
+		},
+		{
+			name:           "Delay override",
+			seqLines:       []string{"1:DC20", "1:DL30"},
+			expectExplicit: true,
+			expectDuration: 30 * time.Millisecond,
+			expectMode:     NeotexDelayLine,
+			expectLines:    []int{0, 1},
+		},
+		{
+			name:           "Delay both zero",
+			seqLines:       []string{"1:DC0; 4:DL0"},
+			expectExplicit: true,
+			expectDuration: 0,
+			expectMode:     "",
+			expectLines:    []int{0, 0},
+		},
+		{
+			name:           "Delay not set",
+			seqLines:       []string{"1:Fr"},
+			expectExplicit: false,
+			expectDuration: 0,
+			expectMode:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta, err := ExtractMetadata(tt.seqLines)
+			if err != nil {
+				t.Fatalf("ExtractMetadata failed: %v", err)
+			}
+			if meta.DelayExplicit != tt.expectExplicit {
+				t.Fatalf("DelayExplicit: expected %v, got %v", tt.expectExplicit, meta.DelayExplicit)
+			}
+			if meta.DelayDuration != tt.expectDuration {
+				t.Fatalf("DelayDuration: expected %v, got %v", tt.expectDuration, meta.DelayDuration)
+			}
+			if meta.DelayMode != tt.expectMode {
+				t.Fatalf("DelayMode: expected %q, got %q", tt.expectMode, meta.DelayMode)
+			}
+			if tt.expectLines != nil {
+				if len(meta.DelayChanges) != len(tt.expectLines) {
+					t.Fatalf("DelayChanges: expected %d entries, got %d", len(tt.expectLines), len(meta.DelayChanges))
+				}
+				for i, expectedLine := range tt.expectLines {
+					if meta.DelayChanges[i].Line != expectedLine {
+						t.Fatalf("DelayChanges[%d].Line: expected %d, got %d", i, expectedLine, meta.DelayChanges[i].Line)
+					}
+				}
+			} else if tt.expectExplicit && len(meta.DelayChanges) == 0 {
+				t.Fatalf("DelayChanges: expected entries, got none")
 			}
 		})
 	}

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/badele/splitans/compare/v0.13.0...v0.14.0) (2026-03-11)
+
+
+### Features
+
+* add delay sequences ([#53](https://github.com/badele/splitans/issues/53)) ([24bfd5a](https://github.com/badele/splitans/commit/24bfd5a5a8827ecf7cd631ed0dffd0b5620b8925))
+
 ## [0.13.0](https://github.com/badele/splitans/compare/v0.12.0...v0.13.0) (2026-03-11)
 
 

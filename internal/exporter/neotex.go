@@ -11,7 +11,7 @@ import (
 )
 
 // NeotexVersion is the current version of the neotex format
-const NeotexVersion = "0.13.0" // x-release-please-version
+const NeotexVersion = "0.14.0" // x-release-please-version
 
 // Neotex color codes indexed by ColorValue.Index (0-15)
 // Index 0-7: normal colors (lowercase), Index 8-15: bright colors (uppercase)

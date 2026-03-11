@@ -50,8 +50,8 @@ curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F tabl
 curl -s https://16colo.rs/pack/1990/raw/WWANS157.ANS | splitans -e cp437 -F stats
 
 # Stream ANSI output with delay (per character or per line)
-cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -d 50ms:c
-cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -d 120ms:l
+cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -D 50ms:c
+cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -D 120ms:l
 ```
 
 ## Neotex Metadata
@@ -62,6 +62,16 @@ Metadata entries live in the sequence column and start with `!` (for example
 and the protected form `!KEY<value>` when it contains spaces or characters such
 as `;`, `,`, or `:`. Metadata values must not contain `<` or `>`; those are
 rejected on import.
+
+Delay sequences live alongside regular codes in the sequence column:
+
+- `pos:DC20` sets a per-character delay of 20ms starting from that line.
+- `pos:DL20` sets a per-line delay of 20ms starting from that line.
+- numeric values are interpreted as milliseconds; you can also use full Go
+  durations like `120ms` or `1s`.
+- `DC0` or `DL0` explicitly disables the delay (same effect as `-D 0`).
+
+The CLI flag for output delay is `-D` (the old `-d` alias is deprecated).
 
 ## Output Examples
 

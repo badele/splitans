@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/badele/splitans/compare/v0.12.0...v0.13.0) (2026-03-11)
+
+
+### Features
+
+* publish parseneotexcolor API ([#51](https://github.com/badele/splitans/issues/51)) ([160cd8f](https://github.com/badele/splitans/commit/160cd8fe722a5b8763ec4f753b6f554e6cc796fe))
+
 ## [0.12.0](https://github.com/badele/splitans/compare/v0.11.0...v0.12.0) (2026-03-10)
 
 

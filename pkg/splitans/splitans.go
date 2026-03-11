@@ -84,6 +84,18 @@ type (
 	Sauce = types.Sauce
 )
 
+// ParseNeotexColor parses a neotex color code for the given target (foreground/background).
+// Accepts standard letter colors, indexed colors, and RGB hex values.
+func ParseNeotexColor(code string, isForeground bool) (ColorValue, error) {
+	return types.ParseNeotexColor(code, isForeground)
+}
+
+// ParseNeotexColorCode parses a neotex color code with explicit F/B prefix.
+// Returns ok=false when the code does not look like a neotex color code.
+func ParseNeotexColorCode(code string) (isForeground bool, color ColorValue, ok bool, err error) {
+	return types.ParseNeotexColorCode(code)
+}
+
 // Token type constants
 const (
 	TokenText          = types.TokenText

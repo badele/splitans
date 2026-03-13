@@ -476,20 +476,147 @@ func ConvertNeotexToANSI(textLines []string, seqLines []string, palette map[int]
 	return result.Bytes(), nil
 }
 
-// styleChange represents a style change at a specific position
-type styleChange struct {
-	position int
-	codes    []string
+// ConvertNeotexToTokens converts neotex format (text + sequences) to token stream.
+// Uses ordered sequence operations to preserve code order and scope changes.
+func ConvertNeotexToTokens(textLines []string, seqLines []string, palette map[int]types.ColorValue, legacyMode bool) ([]types.Token, error) {
+	var tokens []types.Token
+	currentSGR := types.NewSGR()
+	currentScope := types.ScopeVT
+	positionOffset := 0
+
+	for lineIdx, textLine := range textLines {
+		var seqLine string
+		if lineIdx < len(seqLines) {
+			seqLine = seqLines[lineIdx]
+		}
+
+		ops, err := parseLineSequenceOps(seqLine, palette)
+		if err != nil {
+			return nil, fmt.Errorf("neotex line %d: %w", lineIdx+1, err)
+		}
+
+		textRunes := []rune(textLine)
+		textPos := 0
+		for _, op := range ops {
+			if op.position > textPos && op.position <= len(textRunes) {
+				value := string(textRunes[textPos:op.position])
+				if value != "" {
+					tokens = append(tokens, types.Token{
+						Type:  types.TokenText,
+						Value: value,
+						Pos:   positionOffset + textPos,
+					})
+				}
+				textPos = op.position
+			}
+
+			if scope, ok := types.ParseSequenceScope(op.code); ok {
+				currentScope = scope
+				continue
+			}
+
+			if op.code == "CS" {
+				tokens = append(tokens, types.Token{
+					Type:       types.TokenCSI,
+					Raw:        "\x1b[2J",
+					Parameters: []string{"2"},
+					Pos:        positionOffset + op.position,
+					Scope:      currentScope,
+				})
+				continue
+			}
+			if op.code == "GH" {
+				tokens = append(tokens, types.Token{
+					Type:       types.TokenCSI,
+					Raw:        "\x1b[H",
+					Parameters: []string{},
+					Pos:        positionOffset + op.position,
+					Scope:      currentScope,
+				})
+				continue
+			}
+
+			if h, isHyperlink := ApplyNeotexHyperlinkCode(op.code); isHyperlink {
+				hyperlink := h
+				if hyperlink == nil {
+					hyperlink = types.NewHyperlink("")
+				}
+				tokens = append(tokens, types.Token{
+					Type:      types.TokenOSC,
+					Raw:       hyperlinkToOSC8(hyperlink),
+					Hyperlink: hyperlink,
+					Pos:       positionOffset + op.position,
+					Scope:     currentScope,
+				})
+				continue
+			}
+
+			if strings.HasPrefix(op.code, "HF") || strings.HasPrefix(op.code, "HB") {
+				if color := parseHoverColorValue(op.code[2:]); color != nil {
+					params := []string{}
+					switch color.Type {
+					case types.ColorStandard:
+						params = []string{"std", fmt.Sprintf("%d", color.Index)}
+					case types.ColorIndexed:
+						params = []string{"idx", fmt.Sprintf("%d", color.Index)}
+					case types.ColorRGB:
+						params = []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}
+					}
+					tokenType := types.TokenHoverFg
+					if strings.HasPrefix(op.code, "HB") {
+						tokenType = types.TokenHoverBg
+					}
+					tokens = append(tokens, types.Token{
+						Type:       tokenType,
+						Raw:        op.code,
+						Parameters: params,
+						Pos:        positionOffset + op.position,
+						Scope:      currentScope,
+					})
+					continue
+				}
+			}
+
+			newSGR := currentSGR.Copy()
+			ApplyNeotexCode(op.code, newSGR)
+			diff := newSGR.Diff(currentSGR, legacyMode)
+			if len(diff) > 0 {
+				params := make([]string, 0, len(diff))
+				for _, code := range diff {
+					params = append(params, fmt.Sprintf("%d", code))
+				}
+				raw := "\x1b[" + strings.Join(params, ";") + "m"
+				tokens = append(tokens, types.Token{
+					Type:       types.TokenSGR,
+					Raw:        raw,
+					Parameters: params,
+					Pos:        positionOffset + op.position,
+					Scope:      currentScope,
+				})
+			}
+			currentSGR = newSGR
+			textPos = op.position
+		}
+
+		if textPos < len(textRunes) {
+			value := string(textRunes[textPos:])
+			if value != "" {
+				tokens = append(tokens, types.Token{
+					Type:  types.TokenText,
+					Value: value,
+					Pos:   positionOffset + textPos,
+				})
+			}
+		}
+		positionOffset += len(textRunes)
+	}
+
+	return tokens, nil
 }
 
-// styleChangeWithHyperlink represents a style change that may include hyperlink changes
-type styleChangeWithHyperlink struct {
-	position        int
-	codes           []string
-	hyperlink       *types.Hyperlink
-	hasHyperlinkOff bool
-	hoverFg         *types.ColorValue
-	hoverBg         *types.ColorValue
+type sequenceOp struct {
+	position int
+	code     string
 }
 
 // convertLineToANSI converts a single line of text with its sequences to ANSI
@@ -505,11 +632,11 @@ func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR 
 		return textLine, currentSGR, nil
 	}
 
-	styles, err := parseLineSequencesWithHyperlinks(seqLine, palette)
+	ops, err := parseLineSequenceOps(seqLine, palette)
 	if err != nil {
 		return "", currentSGR, err
 	}
-	if len(styles) == 0 {
+	if len(ops) == 0 {
 		return textLine, currentSGR, nil
 	}
 
@@ -518,43 +645,41 @@ func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR 
 	textRunes := []rune(textLine)
 	textPos := 0
 
-	for _, style := range styles {
+	for _, op := range ops {
 		// Write text before this position
-		if style.position > textPos && style.position <= len(textRunes) {
-			result.WriteString(string(textRunes[textPos:style.position]))
+		if op.position > textPos && op.position <= len(textRunes) {
+			result.WriteString(string(textRunes[textPos:op.position]))
+		}
+		code := op.code
+		if _, ok := types.ParseSequenceScope(code); ok {
+			textPos = op.position
+			continue
 		}
 
-		// Apply neotex codes to current SGR
+		if seq, ok := controlCodeToANSI(code); ok {
+			result.WriteString(seq)
+			textPos = op.position
+			continue
+		}
+
+		if h, isHyperlink := ApplyNeotexHyperlinkCode(code); isHyperlink {
+			if h == nil {
+				result.WriteString(hyperlinkToOSC8(nil))
+				currentHyperlink = nil
+			} else {
+				result.WriteString(hyperlinkToOSC8(h))
+				currentHyperlink = h
+			}
+			textPos = op.position
+			continue
+		}
+
 		newSGR := currentSGR.Copy()
-		for _, code := range style.codes {
-			ApplyNeotexCode(code, newSGR)
-		}
-
-		// Generate differential ANSI sequence for SGR
+		ApplyNeotexCode(code, newSGR)
 		ansiSeq := newSGR.DiffToANSI(currentSGR, false, legacyMode)
 		result.WriteString(ansiSeq)
-
-		// Handle hyperlink changes
-		if style.hasHyperlinkOff {
-			// Generate hyperlink OFF sequence
-			result.WriteString(hyperlinkToOSC8(nil))
-			currentHyperlink = nil
-		} else if style.hyperlink != nil {
-			// Generate hyperlink ON sequence
-			if style.hoverFg != nil {
-				fgCopy := *style.hoverFg
-				style.hyperlink.HoverFg = &fgCopy
-			}
-			if style.hoverBg != nil {
-				bgCopy := *style.hoverBg
-				style.hyperlink.HoverBg = &bgCopy
-			}
-			result.WriteString(hyperlinkToOSC8(style.hyperlink))
-			currentHyperlink = style.hyperlink
-		}
-
 		currentSGR = newSGR
-		textPos = style.position
+		textPos = op.position
 	}
 
 	// Write remaining text
@@ -563,6 +688,17 @@ func convertLineToANSIWithHyperlink(textLine string, seqLine string, currentSGR 
 	}
 
 	return result.String(), currentSGR, nil
+}
+
+func controlCodeToANSI(code string) (string, bool) {
+	switch code {
+	case "CS":
+		return "\x1b[2J", true
+	case "GH":
+		return "\x1b[H", true
+	default:
+		return "", false
+	}
 }
 
 // hyperlinkToOSC8 converts a Hyperlink to an OSC 8 escape sequence.
@@ -587,86 +723,28 @@ func hyperlinkToOSC8(h *types.Hyperlink) string {
 	return "\x1b]8;" + params + ";" + h.URL + "\x1b\\"
 }
 
-// parseLineSequencesWithHyperlinks parses sequences for a single line, including hyperlinks.
-// Returns a slice of styleChangeWithHyperlink in the order they appear.
+// parseLineSequenceOps parses sequences for a single line, preserving code order.
+// Returns a slice of sequenceOps in the order they appear.
 // Metadata entries starting with '!' are ignored (e.g., !V1 for version)
-func parseLineSequencesWithHyperlinks(seqLine string, palette map[int]types.ColorValue) ([]styleChangeWithHyperlink, error) {
-	var styles []styleChangeWithHyperlink
+func parseLineSequenceOps(seqLine string, palette map[int]types.ColorValue) ([]sequenceOp, error) {
+	var ops []sequenceOp
 	if seqLine == "" {
-		return styles, nil
+		return ops, nil
 	}
+	seqLine, _ = stripSequenceComment(seqLine)
 
 	lastPosition := -1
 
-	parseHoverColorValue := func(code string) *types.ColorValue {
-		if len(code) == 0 {
-			return nil
-		}
-		// RGB (6 hex)
-		if len(code) == 6 {
-			if r, g, b, err := parseRGBHex(code); err == nil {
-				return &types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
-			}
-		}
-		// Indexed
-		if idx, err := strconv.Atoi(code); err == nil && idx >= 0 && idx <= 255 {
-			return &types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
-		}
-		// Standard single-letter (k r g y b m c w K R G Y B M C W)
-		if len(code) == 1 {
-			switch code {
-			case "k":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 0}
-			case "r":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 1}
-			case "g":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 2}
-			case "y":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 3}
-			case "b":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 4}
-			case "m":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 5}
-			case "c":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 6}
-			case "w":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 7}
-			case "K":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 8}
-			case "R":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 9}
-			case "G":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 10}
-			case "Y":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 11}
-			case "B":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 12}
-			case "M":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 13}
-			case "C":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 14}
-			case "W":
-				return &types.ColorValue{Type: types.ColorStandard, Index: 15}
-			}
-		}
-		return nil
-	}
-
-	// Split by semicolons to get position entries
 	entries := splitNeotexEntries(seqLine)
-
 	for _, entry := range entries {
 		entry = strings.TrimSpace(entry)
 		if entry == "" {
 			continue
 		}
-
-		// Skip metadata entries (start with '!')
 		if strings.HasPrefix(entry, "!") {
 			continue
 		}
 
-		// Split position from styles: "14:Fr, EU, HL:<url>"
 		parts := strings.SplitN(entry, ":", 2)
 		if len(parts) != 2 {
 			continue
@@ -676,23 +754,14 @@ func parseLineSequencesWithHyperlinks(seqLine string, palette map[int]types.Colo
 		if err != nil {
 			continue
 		}
-		// Convert 1-indexed (editor format) to 0-indexed (internal)
 		position--
 		if position <= lastPosition {
 			return nil, fmt.Errorf("sequence positions must be strictly increasing: %d <= %d", position+1, lastPosition+1)
 		}
 		lastPosition = position
 
-		// Parse styles separated by commas
 		stylesStr := strings.TrimSpace(parts[1])
 		styleList := strings.Split(stylesStr, ",")
-
-		var codes []string
-		var hyperlink *types.Hyperlink
-		hasHyperlinkOff := false
-		var hoverFg *types.ColorValue
-		var hoverBg *types.ColorValue
-
 		for _, style := range styleList {
 			style = strings.TrimSpace(style)
 			if style == "" {
@@ -709,11 +778,11 @@ func parseLineSequencesWithHyperlinks(seqLine string, palette map[int]types.Colo
 				if !ok {
 					return nil, fmt.Errorf("undefined palette index %d", idx)
 				}
+				prefix := "HB"
 				if isFg {
-					hoverFg = &color
-				} else {
-					hoverBg = &color
+					prefix = "HF"
 				}
+				ops = append(ops, sequenceOp{position: position, code: fmt.Sprintf("%s%02X%02X%02X", prefix, color.R, color.G, color.B)})
 				continue
 			}
 			if strings.HasPrefix(style, "FP") || strings.HasPrefix(style, "BP") {
@@ -730,52 +799,15 @@ func parseLineSequencesWithHyperlinks(seqLine string, palette map[int]types.Colo
 				if strings.HasPrefix(style, "BP") {
 					prefix = "B"
 				}
-				codes = append(codes, fmt.Sprintf("%s%02X%02X%02X", prefix, color.R, color.G, color.B))
+				ops = append(ops, sequenceOp{position: position, code: fmt.Sprintf("%s%02X%02X%02X", prefix, color.R, color.G, color.B)})
 				continue
 			}
 
-			// Check if it's a hyperlink code
-			if h, isHyperlink := ApplyNeotexHyperlinkCode(style); isHyperlink {
-				if h == nil {
-					hasHyperlinkOff = true
-				} else {
-					hyperlink = h
-				}
-				continue
-			}
-
-			// Hover colors HF/HB (reuse ApplyNeotexCode parsing rules)
-			if strings.HasPrefix(style, "HF") || strings.HasPrefix(style, "HB") {
-				if strings.HasPrefix(style, "HF") {
-					if c := parseHoverColorValue(style[2:]); c != nil {
-						hoverFg = c
-						continue
-					}
-				}
-				if strings.HasPrefix(style, "HB") {
-					if c := parseHoverColorValue(style[2:]); c != nil {
-						hoverBg = c
-						continue
-					}
-				}
-			}
-
-			codes = append(codes, style)
-		}
-
-		if len(codes) > 0 || hyperlink != nil || hasHyperlinkOff || hoverFg != nil || hoverBg != nil {
-			styles = append(styles, styleChangeWithHyperlink{
-				position:        position,
-				codes:           codes,
-				hyperlink:       hyperlink,
-				hasHyperlinkOff: hasHyperlinkOff,
-				hoverFg:         hoverFg,
-				hoverBg:         hoverBg,
-			})
+			ops = append(ops, sequenceOp{position: position, code: style})
 		}
 	}
 
-	return styles, nil
+	return ops, nil
 }
 
 // parseNeotexVersion parses a version string that may contain 1 to 3 numeric segments.
@@ -800,86 +832,4 @@ func parseNeotexVersion(raw string) (int, int, int, bool) {
 	}
 
 	return nums[0], nums[1], nums[2], true
-}
-
-// parseLineSequences parses sequences for a single line
-// Returns a slice of styleChange in the order they appear (already sorted)
-// Metadata entries starting with '!' are ignored (e.g., !V1 for version)
-func parseLineSequences(seqLine string, palette map[int]types.ColorValue) ([]styleChange, error) {
-	var styles []styleChange
-	if seqLine == "" {
-		return styles, nil
-	}
-
-	lastPosition := -1
-
-	// Split by semicolons to get position entries
-	entries := splitNeotexEntries(seqLine)
-
-	for _, entry := range entries {
-		entry = strings.TrimSpace(entry)
-		if entry == "" {
-			continue
-		}
-
-		// Skip metadata entries (start with '!')
-		if strings.HasPrefix(entry, "!") {
-			continue
-		}
-
-		// Split position from styles: "14:Fr, EU"
-		parts := strings.SplitN(entry, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		position, err := strconv.Atoi(strings.TrimSpace(parts[0]))
-		if err != nil {
-			continue
-		}
-		// Convert 1-indexed (editor format) to 0-indexed (internal)
-		position--
-		if position <= lastPosition {
-			return nil, fmt.Errorf("sequence positions must be strictly increasing: %d <= %d", position+1, lastPosition+1)
-		}
-		lastPosition = position
-
-		// Parse styles separated by commas
-		stylesStr := strings.TrimSpace(parts[1])
-		styleList := strings.Split(stylesStr, ",")
-
-		codes := make([]string, 0)
-		for _, style := range styleList {
-			style = strings.TrimSpace(style)
-			if style != "" {
-				if strings.HasPrefix(style, "FP") || strings.HasPrefix(style, "BP") {
-					idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "FP"), "BP")
-					idx, err := strconv.Atoi(idxStr)
-					if err != nil || idx < 0 {
-						return nil, fmt.Errorf("invalid palette index %q", idxStr)
-					}
-					color, ok := palette[idx]
-					if !ok {
-						return nil, fmt.Errorf("undefined palette index %d", idx)
-					}
-					prefix := "F"
-					if strings.HasPrefix(style, "BP") {
-						prefix = "B"
-					}
-					codes = append(codes, fmt.Sprintf("%s%02X%02X%02X", prefix, color.R, color.G, color.B))
-					continue
-				}
-				codes = append(codes, style)
-			}
-		}
-
-		if len(codes) > 0 {
-			styles = append(styles, styleChange{
-				position: position,
-				codes:    codes,
-			})
-		}
-	}
-
-	return styles, nil
 }

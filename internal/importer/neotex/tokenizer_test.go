@@ -570,6 +570,18 @@ func TestConvertNeotexToANSI(t *testing.T) {
 			seqLines:  []string{"1:Fr"},
 			contains:  []string{"Hello", "\x1b["},
 		},
+		{
+			name:      "Clear screen control",
+			textLines: []string{"Hello"},
+			seqLines:  []string{"1:CS"},
+			contains:  []string{"Hello", "\x1b[2J"},
+		},
+		{
+			name:      "Go home control",
+			textLines: []string{"Hello"},
+			seqLines:  []string{"1:GH"},
+			contains:  []string{"Hello", "\x1b[H"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -693,53 +705,56 @@ func TestTokenizerGetStats(t *testing.T) {
 	}
 }
 
-func TestParseLineSequences(t *testing.T) {
+func TestParseLineSequenceOps(t *testing.T) {
 	tests := []struct {
 		name      string
 		seqLine   string
-		expected  []styleChange
+		expected  []sequenceOp
 		expectErr bool
 	}{
 		{
 			name:     "Empty",
 			seqLine:  "",
-			expected: []styleChange{},
+			expected: []sequenceOp{},
 		},
 		{
-			name:    "Single style",
-			seqLine: "1:Fr",
-			expected: []styleChange{
-				{position: 0, codes: []string{"Fr"}},
-			},
+			name:     "Single style",
+			seqLine:  "1:Fr",
+			expected: []sequenceOp{{position: 0, code: "Fr"}},
 		},
 		{
 			name:    "Multiple styles same position",
 			seqLine: "1:Fr, EU",
-			expected: []styleChange{
-				{position: 0, codes: []string{"Fr", "EU"}},
+			expected: []sequenceOp{
+				{position: 0, code: "Fr"},
+				{position: 0, code: "EU"},
 			},
 		},
 		{
 			name:    "Multiple positions",
 			seqLine: "1:Fr; 5:Fg",
-			expected: []styleChange{
-				{position: 0, codes: []string{"Fr"}},
-				{position: 4, codes: []string{"Fg"}},
+			expected: []sequenceOp{
+				{position: 0, code: "Fr"},
+				{position: 4, code: "Fg"},
 			},
 		},
 		{
-			name:    "Skip metadata",
-			seqLine: fmt.Sprintf("!V%s.23; 1:Fr", exporter.NeotexVersion),
-			expected: []styleChange{
-				{position: 0, codes: []string{"Fr"}},
+			name:    "Control codes",
+			seqLine: "1:CS, GH",
+			expected: []sequenceOp{
+				{position: 0, code: "CS"},
+				{position: 0, code: "GH"},
 			},
 		},
 		{
-			name:    "Skip protected metadata",
-			seqLine: "!ST<Hello;World>; 1:Fr",
-			expected: []styleChange{
-				{position: 0, codes: []string{"Fr"}},
-			},
+			name:     "Skip metadata",
+			seqLine:  fmt.Sprintf("!V%s.23; 1:Fr", exporter.NeotexVersion),
+			expected: []sequenceOp{{position: 0, code: "Fr"}},
+		},
+		{
+			name:     "Skip protected metadata",
+			seqLine:  "!ST<Hello;World>; 1:Fr",
+			expected: []sequenceOp{{position: 0, code: "Fr"}},
 		},
 		{
 			name:      "Non increasing positions",
@@ -757,7 +772,7 @@ func TestParseLineSequences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseLineSequences(tt.seqLine, map[int]types.ColorValue{})
+			result, err := parseLineSequenceOps(tt.seqLine, map[int]types.ColorValue{})
 			if tt.expectErr {
 				if err == nil {
 					t.Fatal("Expected error, got nil")
@@ -768,14 +783,14 @@ func TestParseLineSequences(t *testing.T) {
 				t.Fatalf("Unexpected error: %v", err)
 			}
 			if len(result) != len(tt.expected) {
-				t.Fatalf("Expected %d style changes, got %d", len(tt.expected), len(result))
+				t.Fatalf("Expected %d sequence ops, got %d", len(tt.expected), len(result))
 			}
 			for i, expected := range tt.expected {
 				if result[i].position != expected.position {
 					t.Errorf("Position %d: expected %d, got %d", i, expected.position, result[i].position)
 				}
-				if !reflect.DeepEqual(result[i].codes, expected.codes) {
-					t.Errorf("Codes %d: expected %v, got %v", i, expected.codes, result[i].codes)
+				if result[i].code != expected.code {
+					t.Errorf("Code %d: expected %q, got %q", i, expected.code, result[i].code)
 				}
 			}
 		})
@@ -786,18 +801,18 @@ func TestParseLineSequencesPalette(t *testing.T) {
 	palette := map[int]types.ColorValue{
 		2: {Type: types.ColorRGB, R: 0xFF, G: 0x00, B: 0x80},
 	}
-	result, err := parseLineSequences("1:FP2", palette)
+	result, err := parseLineSequenceOps("1:FP2", palette)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
 	if len(result) != 1 {
 		t.Fatalf("Expected 1 style change, got %d", len(result))
 	}
-	if len(result[0].codes) != 1 || result[0].codes[0] != "FFF0080" {
-		t.Fatalf("Unexpected palette conversion: %v", result[0].codes)
+	if result[0].code != "FFF0080" {
+		t.Fatalf("Unexpected palette conversion: %v", result[0].code)
 	}
 
-	_, err = parseLineSequences("1:FP9", map[int]types.ColorValue{})
+	_, err = parseLineSequenceOps("1:FP9", map[int]types.ColorValue{})
 	if err == nil {
 		t.Fatal("Expected undefined palette index to return error")
 	}
@@ -911,44 +926,40 @@ func TestExtractMetadataRejectsAngleBrackets(t *testing.T) {
 	}
 }
 
-func TestParseLineSequencesWithHyperlinks(t *testing.T) {
+func TestParseLineSequenceOpsHyperlinks(t *testing.T) {
 	tests := []struct {
-		name                 string
-		seqLine              string
-		expectedCount        int
-		expectedHasHyperlink bool
-		expectedHyperlinkOff bool
-		expectedURL          string
-		expectedHyperlinkPos int
-		expectedSGRCodeCount int
-		expectErr            bool
+		name      string
+		seqLine   string
+		expected  []sequenceOp
+		expectErr bool
 	}{
 		{
-			name:                 "Hyperlink ON only",
-			seqLine:              "9:HL:<https://example.com>",
-			expectedCount:        1,
-			expectedHasHyperlink: true,
-			expectedURL:          "https://example.com",
-			expectedHyperlinkPos: 8,
-			expectedSGRCodeCount: 0,
+			name:     "Hyperlink ON only",
+			seqLine:  "9:HL:<https://example.com>",
+			expected: []sequenceOp{{position: 8, code: "HL:<https://example.com>"}},
 		},
 		{
-			name:                 "Hyperlink OFF only",
-			seqLine:              "12:Hl",
-			expectedCount:        1,
-			expectedHasHyperlink: false,
-			expectedHyperlinkOff: true,
-			expectedHyperlinkPos: 11,
-			expectedSGRCodeCount: 0,
+			name:    "Control codes with hyperlink",
+			seqLine: "1:CS, GH, HL:<https://example.com>",
+			expected: []sequenceOp{
+				{position: 0, code: "CS"},
+				{position: 0, code: "GH"},
+				{position: 0, code: "HL:<https://example.com>"},
+			},
 		},
 		{
-			name:                 "Mixed SGR and Hyperlink",
-			seqLine:              "9:Fr, HL:<https://example.com>; 12:Hl",
-			expectedCount:        2,
-			expectedHasHyperlink: true,
-			expectedURL:          "https://example.com",
-			expectedHyperlinkPos: 8,
-			expectedSGRCodeCount: 1,
+			name:     "Hyperlink OFF only",
+			seqLine:  "12:Hl",
+			expected: []sequenceOp{{position: 11, code: "Hl"}},
+		},
+		{
+			name:    "Mixed SGR and Hyperlink",
+			seqLine: "9:Fr, HL:<https://example.com>; 12:Hl",
+			expected: []sequenceOp{
+				{position: 8, code: "Fr"},
+				{position: 8, code: "HL:<https://example.com>"},
+				{position: 11, code: "Hl"},
+			},
 		},
 		{
 			name:      "Non increasing positions",
@@ -964,7 +975,7 @@ func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseLineSequencesWithHyperlinks(tt.seqLine, map[int]types.ColorValue{})
+			result, err := parseLineSequenceOps(tt.seqLine, map[int]types.ColorValue{})
 			if tt.expectErr {
 				if err == nil {
 					t.Fatal("Expected error, got nil")
@@ -974,29 +985,62 @@ func TestParseLineSequencesWithHyperlinks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
-
-			if len(result) != tt.expectedCount {
-				t.Fatalf("Expected %d style changes, got %d", tt.expectedCount, len(result))
+			if len(result) != len(tt.expected) {
+				t.Fatalf("Expected %d sequence ops, got %d", len(tt.expected), len(result))
 			}
+			for i, expected := range tt.expected {
+				if result[i].position != expected.position {
+					t.Errorf("Position %d: expected %d, got %d", i, expected.position, result[i].position)
+				}
+				if result[i].code != expected.code {
+					t.Errorf("Code %d: expected %q, got %q", i, expected.code, result[i].code)
+				}
+			}
+		})
+	}
+}
 
-			if tt.expectedCount > 0 {
-				first := result[0]
-				if first.position != tt.expectedHyperlinkPos {
-					t.Errorf("Expected position %d, got %d", tt.expectedHyperlinkPos, first.position)
-				}
-				if tt.expectedHasHyperlink {
-					if first.hyperlink == nil {
-						t.Error("Expected hyperlink to be non-nil")
-					} else if first.hyperlink.URL != tt.expectedURL {
-						t.Errorf("Expected URL %q, got %q", tt.expectedURL, first.hyperlink.URL)
-					}
-				}
-				if tt.expectedHyperlinkOff && !first.hasHyperlinkOff {
-					t.Error("Expected hasHyperlinkOff to be true")
-				}
-				if len(first.codes) != tt.expectedSGRCodeCount {
-					t.Errorf("Expected %d SGR codes, got %d", tt.expectedSGRCodeCount, len(first.codes))
-				}
+func TestStripSequenceComment(t *testing.T) {
+	tests := []struct {
+		name         string
+		seqLine      string
+		expectedLine string
+		expectedNote string
+	}{
+		{
+			name:         "No comment",
+			seqLine:      "1:Fr, EU",
+			expectedLine: "1:Fr, EU",
+			expectedNote: "",
+		},
+		{
+			name:         "Trailing comment",
+			seqLine:      "1:Fr # comment",
+			expectedLine: "1:Fr",
+			expectedNote: "# comment",
+		},
+		{
+			name:         "Comment without semicolon",
+			seqLine:      "!V0.14.0; 1:Fr #note",
+			expectedLine: "!V0.14.0; 1:Fr",
+			expectedNote: "#note",
+		},
+		{
+			name:         "Hash inside hyperlink",
+			seqLine:      "1:HL:<https://example.com/#frag>; 2:Fr # end",
+			expectedLine: "1:HL:<https://example.com/#frag>; 2:Fr",
+			expectedNote: "# end",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clean, note := stripSequenceComment(tt.seqLine)
+			if clean != tt.expectedLine {
+				t.Fatalf("expected cleaned %q, got %q", tt.expectedLine, clean)
+			}
+			if note != tt.expectedNote {
+				t.Fatalf("expected comment %q, got %q", tt.expectedNote, note)
 			}
 		})
 	}

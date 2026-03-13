@@ -449,14 +449,17 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 
 	totalSeqs := 0
 	totalHyperlinkSeqs := 0
+	totalOrderedSeqs := 0
 	for _, line := range lines {
 		totalSeqs += len(line.Sequences)
 		totalHyperlinkSeqs += len(line.HyperlinkSequences)
+		totalOrderedSeqs += len(line.OrderedSequences)
 	}
 
 	var textBuilder strings.Builder
 	flattenedSeqs := make([]types.SGRSequence, 0, totalSeqs)
 	flattenedHyperlinkSeqs := make([]types.HyperlinkSequence, 0, totalHyperlinkSeqs)
+	flattenedOrderedSeqs := make([]types.SequenceOp, 0, totalOrderedSeqs)
 
 	offset := 0
 	for _, line := range lines {
@@ -480,6 +483,12 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 			})
 		}
 
+		for _, seq := range line.OrderedSequences {
+			seqCopy := seq
+			seqCopy.Position += offset
+			flattenedOrderedSeqs = append(flattenedOrderedSeqs, seqCopy)
+		}
+
 		offset += len([]rune(line.Text))
 	}
 
@@ -487,13 +496,13 @@ func flattenLinesWithSequences(lines []types.LineWithSequences) []types.LineWith
 		Text:               textBuilder.String(),
 		Sequences:          flattenedSeqs,
 		HyperlinkSequences: flattenedHyperlinkSeqs,
+		OrderedSequences:   flattenedOrderedSeqs,
 	}}
 }
 
 func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing bool) (string, string, error) {
 	lines := vt.ExportSplitTextAndSequences(keepTrailing && !inline)
 	buffer := vt.GetBuffer()
-
 	if inline {
 		lines = flattenLinesWithSequences(lines)
 	}
@@ -508,6 +517,7 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing boo
 	// Track previous SGR state across all lines for differential encoding
 	var previousSGR *types.SGR = nil
 	var previousHyperlink *types.Hyperlink = nil
+	currentScope := types.ScopeVT
 
 	textWidth := vt.GetWidth()
 	maxWidth := vt.GetMaxCursorX() + 1
@@ -534,7 +544,12 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing boo
 		rowMaxX := -1
 		if inline {
 			textRunes := []rune(line.Text)
-			rowMaxX = len(textRunes) - 1
+			for i := len(textRunes) - 1; i >= 0; i-- {
+				if textRunes[i] != ' ' {
+					rowMaxX = i
+					break
+				}
+			}
 		} else if lineIdx < len(buffer) {
 			for x := 0; x < len(buffer[lineIdx]); x++ {
 				if buffer[lineIdx][x].Char != 0x0 {
@@ -545,7 +560,6 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing boo
 		if rowMaxX < 0 {
 			rowMaxX = textWidth - 1
 		}
-
 		linePreviousSGR := previousSGR
 		if linePreviousSGR != nil {
 			linePreviousSGR = linePreviousSGR.Copy()
@@ -567,87 +581,83 @@ func exportToNeotex(vt *processor.VirtualTerminal, inline bool, keepTrailing boo
 			lineSeqs = append(lineSeqs, fmt.Sprintf("!N%d/%d", lineCount, totalLines))
 		}
 
-		// Merge SGR and hyperlink sequences by position
-		sgrIdx := 0
-		hyperlinkIdx := 0
-
-		// Process all positions that have either SGR or hyperlink changes
-		for sgrIdx < len(line.Sequences) || hyperlinkIdx < len(line.HyperlinkSequences) {
-			var sgrPos, hyperlinkPos int = -1, -1
-			if sgrIdx < len(line.Sequences) {
-				sgrPos = line.Sequences[sgrIdx].Position
-			}
-			if hyperlinkIdx < len(line.HyperlinkSequences) {
-				hyperlinkPos = line.HyperlinkSequences[hyperlinkIdx].Position
-			}
-
-			// Determine which to process first (or both if same position)
-			var codes []string
-			var pos int
-
-			if sgrPos >= 0 && (hyperlinkPos < 0 || sgrPos <= hyperlinkPos) {
-				pos = sgrPos
-				allowTrailingReset := pos == rowMaxX+1 && line.Sequences[sgrIdx].SGR.Equals(defaultSGR)
-				if pos > rowMaxX && !allowTrailingReset {
-					sgrIdx++
-					if hyperlinkPos == pos {
-						hyperlinkIdx++
-					}
-					continue
-				}
-				// Generate differential neotex codes for SGR
-				neotexCodes := DiffSGRToNeotex(line.Sequences[sgrIdx].SGR, linePreviousSGR)
-				codes = append(codes, neotexCodes...)
-				linePreviousSGR = line.Sequences[sgrIdx].SGR.Copy()
-				if pos <= rowMaxX || allowTrailingReset {
-					previousSGR = line.Sequences[sgrIdx].SGR.Copy()
-				}
-				sgrIdx++
-
-				// Check if there's also a hyperlink change at the same position
-				if hyperlinkIdx < len(line.HyperlinkSequences) && line.HyperlinkSequences[hyperlinkIdx].Position == pos {
-					newHyperlink := line.HyperlinkSequences[hyperlinkIdx].Hyperlink
-					if !newHyperlink.Equals(previousHyperlink) {
-						codes = append(codes, HyperlinkToNeotex(newHyperlink))
-						if newHyperlink != nil {
-							previousHyperlink = newHyperlink.Copy()
-						} else {
-							previousHyperlink = nil
-						}
-					}
-					hyperlinkIdx++
-				}
-			} else if hyperlinkPos >= 0 {
-				pos = hyperlinkPos
-				allowTrailingReset := pos == rowMaxX+1 && line.HyperlinkSequences[hyperlinkIdx].Hyperlink == nil
-				if pos > rowMaxX && !allowTrailingReset {
-					hyperlinkIdx++
-					continue
-				}
-				newHyperlink := line.HyperlinkSequences[hyperlinkIdx].Hyperlink
-				if !newHyperlink.Equals(previousHyperlink) {
-					codes = append(codes, HyperlinkToNeotex(newHyperlink))
-					if newHyperlink != nil {
-						previousHyperlink = newHyperlink.Copy()
-					} else {
-						previousHyperlink = nil
-					}
-				}
-				hyperlinkIdx++
-			} else {
-				break
-			}
-
-			if len(codes) > 0 {
-				// Use position relative to the current line (1-indexed for editor compatibility)
-				seqStr := fmt.Sprintf("%d:%s", pos+1, strings.Join(codes, ", "))
+		var currentPos = -1
+		var currentCodes []string
+		flush := func() {
+			if currentPos >= 0 && len(currentCodes) > 0 {
+				seqStr := fmt.Sprintf("%d:%s", currentPos+1, strings.Join(currentCodes, ", "))
 				lineSeqs = append(lineSeqs, seqStr)
 			}
 		}
 
+		for _, op := range line.OrderedSequences {
+			pos := op.Position
+			if pos != currentPos {
+				flush()
+				currentPos = pos
+				currentCodes = []string{}
+			}
+
+			scope := op.Scope.Normalize()
+			var opCodes []string
+			switch op.Kind {
+			case types.SequenceOpControl:
+				opCodes = append(opCodes, op.Control)
+			case types.SequenceOpSGR:
+				if op.SGR == nil {
+					break
+				}
+				neotexCodes := DiffSGRToNeotex(op.SGR, linePreviousSGR)
+				if len(neotexCodes) > 0 {
+					opCodes = append(opCodes, neotexCodes...)
+					linePreviousSGR = op.SGR.Copy()
+					previousSGR = op.SGR.Copy()
+				}
+			case types.SequenceOpHyperlink:
+				if op.Hyperlink == nil {
+					if previousHyperlink != nil {
+						opCodes = append(opCodes, HyperlinkToNeotex(nil))
+						previousHyperlink = nil
+					}
+				} else if !op.Hyperlink.Equals(previousHyperlink) {
+					opCodes = append(opCodes, HyperlinkToNeotex(op.Hyperlink))
+					previousHyperlink = op.Hyperlink.Copy()
+				}
+			}
+
+			if len(opCodes) == 0 {
+				continue
+			}
+			if scope != currentScope {
+				currentCodes = append(currentCodes, scope.String())
+				currentScope = scope
+			}
+			currentCodes = append(currentCodes, opCodes...)
+		}
+		flush()
+
+		resetPos := rowMaxX + 1
+		if resetPos < textWidth && linePreviousSGR != nil && !linePreviousSGR.Equals(defaultSGR) {
+			resetCodes := DiffSGRToNeotex(defaultSGR, linePreviousSGR)
+			if len(resetCodes) > 0 {
+				seqStr := fmt.Sprintf("%d:%s", resetPos+1, strings.Join(resetCodes, ", "))
+				lineSeqs = append(lineSeqs, seqStr)
+				previousSGR = defaultSGR.Copy()
+				linePreviousSGR = defaultSGR.Copy()
+			}
+		}
+
+		lineSeqText := strings.Join(lineSeqs, "; ")
+		if !inline && line.Comment != "" {
+			if lineSeqText != "" {
+				lineSeqText += " "
+			}
+			lineSeqText += line.Comment
+		}
+
 		// Add line sequences to builder
-		if len(lineSeqs) > 0 {
-			seqBuilder.WriteString(strings.Join(lineSeqs, "; "))
+		if lineSeqText != "" {
+			seqBuilder.WriteString(lineSeqText)
 		}
 
 		// Add newline if not last line

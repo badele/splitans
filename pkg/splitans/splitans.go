@@ -40,6 +40,8 @@ type (
 
 	// TokenType represents the type of a token
 	TokenType = types.TokenType
+	// SequenceScope represents the target scope for a sequence
+	SequenceScope = types.SequenceScope
 
 	// TokenStats contains statistics about parsed tokens
 	TokenStats = types.TokenStats
@@ -98,17 +100,21 @@ func ParseNeotexColorCode(code string) (isForeground bool, color ColorValue, ok 
 
 // Token type constants
 const (
-	TokenText          = types.TokenText
-	TokenC0            = types.TokenC0
-	TokenC1            = types.TokenC1
-	TokenCSI           = types.TokenCSI
-	TokenCSIInterupted = types.TokenCSIInterupted
-	TokenSGR           = types.TokenSGR
-	TokenDCS           = types.TokenDCS
-	TokenOSC           = types.TokenOSC
-	TokenEscape        = types.TokenEscape
-	TokenSauce         = types.TokenSauce
-	TokenUnknown       = types.TokenUnknown
+	TokenText            = types.TokenText
+	TokenC0              = types.TokenC0
+	TokenC1              = types.TokenC1
+	TokenCSI             = types.TokenCSI
+	TokenCSIInterupted   = types.TokenCSIInterupted
+	TokenSGR             = types.TokenSGR
+	TokenDCS             = types.TokenDCS
+	TokenOSC             = types.TokenOSC
+	TokenEscape          = types.TokenEscape
+	TokenSauce           = types.TokenSauce
+	TokenSequenceComment = types.TokenSequenceComment
+	TokenUnknown         = types.TokenUnknown
+	ScopeVT              = types.ScopeVT
+	ScopeEX              = types.ScopeEX
+	ScopeVX              = types.ScopeVX
 )
 
 // Color type constants

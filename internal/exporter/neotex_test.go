@@ -80,6 +80,32 @@ func TestExportToNeotexWithHyperlinks(t *testing.T) {
 	}
 }
 
+func TestExportToNeotexWithControlSequences(t *testing.T) {
+	vt := processor.NewVirtualTerminal(5, 1, "utf8", false, false)
+
+	tokens := []types.Token{
+		{Type: types.TokenCSI, Raw: "\x1b[2J", Parameters: []string{"2"}},
+		{Type: types.TokenCSI, Raw: "\x1b[H", Parameters: []string{}},
+		{Type: types.TokenText, Value: "A"},
+	}
+
+	if err := vt.ApplyTokens(tokens); err != nil {
+		t.Fatalf("unexpected apply error: %v", err)
+	}
+
+	_, sequences, err := ExportToNeotex(vt)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
+
+	if !strings.Contains(sequences, "CS") {
+		t.Fatalf("expected sequences to contain CS, got %q", sequences)
+	}
+	if !strings.Contains(sequences, "GH") {
+		t.Fatalf("expected sequences to contain GH, got %q", sequences)
+	}
+}
+
 func TestHyperlinkRoundTrip(t *testing.T) {
 	// Create ANSI input with hyperlinks
 	ansiInput := "Click \x1b]8;;https://example.com\x1b\\here\x1b]8;;\x1b\\ to continue"
@@ -151,6 +177,50 @@ func TestExportToInlineNeotex(t *testing.T) {
 	expectedSequences := fmt.Sprintf("!V%s; !W6/8; !N1/1; 1:Fr, Bk; 5:Fg; 7:R0", NeotexVersion)
 	if sequences != expectedSequences {
 		t.Fatalf("unexpected inline sequences: got %q, want %q", sequences, expectedSequences)
+	}
+}
+
+func TestExportToNeotexPreservesComments(t *testing.T) {
+	vt := processor.NewVirtualTerminal(2, 2, "utf8", false, false)
+
+	tokens := []types.Token{
+		{Type: types.TokenText, Value: "A"},
+		{Type: types.TokenSequenceComment, Line: 0, Comment: "# note"},
+	}
+
+	if err := vt.ApplyTokens(tokens); err != nil {
+		t.Fatalf("unexpected apply error: %v", err)
+	}
+
+	_, sequences, err := ExportToNeotex(vt)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
+
+	if !strings.Contains(sequences, "# note") {
+		t.Fatalf("expected sequences to contain comment, got %q", sequences)
+	}
+}
+
+func TestExportToInlineNeotexDropsComments(t *testing.T) {
+	vt := processor.NewVirtualTerminal(2, 1, "utf8", false, false)
+
+	tokens := []types.Token{
+		{Type: types.TokenText, Value: "A"},
+		{Type: types.TokenSequenceComment, Line: 0, Comment: "# note"},
+	}
+
+	if err := vt.ApplyTokens(tokens); err != nil {
+		t.Fatalf("unexpected apply error: %v", err)
+	}
+
+	_, sequences, err := ExportToInlineNeotex(vt)
+	if err != nil {
+		t.Fatalf("unexpected export error: %v", err)
+	}
+
+	if strings.Contains(sequences, "# note") {
+		t.Fatalf("expected inline sequences to drop comment, got %q", sequences)
 	}
 }
 

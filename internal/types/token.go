@@ -28,6 +28,7 @@ const (
 	TokenOSC
 	TokenEscape
 	TokenSauce
+	TokenSequenceComment
 	TokenUnknown
 )
 
@@ -57,11 +58,88 @@ func (t TokenType) String() string {
 		return "TokenEscape"
 	case TokenSauce:
 		return "TokenSauce"
+	case TokenSequenceComment:
+		return "TokenSequenceComment"
 	case TokenUnknown:
 		return "TokenUnknown"
 	default:
 		return fmt.Sprintf("TokenType(%d)", t)
 	}
+}
+
+/////////////////////////////////////////////////////////////////////////
+// SEQUENCE SCOPE
+/////////////////////////////////////////////////////////////////////////
+
+type SequenceScope int
+
+const (
+	ScopeVT SequenceScope = iota
+	ScopeEX
+	ScopeVX
+)
+
+func (s SequenceScope) String() string {
+	switch s {
+	case ScopeVT:
+		return "VT"
+	case ScopeEX:
+		return "EX"
+	case ScopeVX:
+		return "VX"
+	default:
+		return "VT"
+	}
+}
+
+func (s SequenceScope) Normalize() SequenceScope {
+	switch s {
+	case ScopeVT, ScopeEX, ScopeVX:
+		return s
+	default:
+		return ScopeVT
+	}
+}
+
+func (s SequenceScope) IncludesVT() bool {
+	n := s.Normalize()
+	return n == ScopeVT || n == ScopeVX
+}
+
+func (s SequenceScope) IncludesExport() bool {
+	n := s.Normalize()
+	return n == ScopeEX || n == ScopeVX
+}
+
+func ParseSequenceScope(value string) (SequenceScope, bool) {
+	switch value {
+	case "VT":
+		return ScopeVT, true
+	case "EX":
+		return ScopeEX, true
+	case "VX":
+		return ScopeVX, true
+	default:
+		return ScopeVT, false
+	}
+}
+
+func (s SequenceScope) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
+}
+
+func (s *SequenceScope) UnmarshalJSON(data []byte) error {
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+
+	parsed, ok := ParseSequenceScope(value)
+	if !ok {
+		return fmt.Errorf("unknown SequenceScope: %s", value)
+	}
+	*s = parsed
+	return nil
 }
 
 func (t TokenType) MarshalJSON() ([]byte, error) {
@@ -99,6 +177,8 @@ func (t *TokenType) UnmarshalJSON(data []byte) error {
 		*t = TokenEscape
 	case "TokenSauce":
 		*t = TokenSauce
+	case "TokenSequenceComment":
+		*t = TokenSequenceComment
 	case "TokenUnknown":
 		*t = TokenUnknown
 	default:
@@ -113,17 +193,20 @@ func (t *TokenType) UnmarshalJSON(data []byte) error {
 /////////////////////////////////////////////////////////////////////////////
 
 type Token struct {
-	Type          TokenType  `json:"type"`
-	Pos           int        `json:"pos"`
-	Raw           string     `json:"raw"`
-	Value         string     `json:"value,omitempty"`
-	Parameters    []string   `json:"parameters,omitempty"`
-	C0Code        byte       `json:"c0_code,omitempty"`
-	C1Code        string     `json:"c1_code,omitempty"`
-	CSINotation   string     `json:"csi_notation,omitempty"`
-	Signification string     `json:"signification,omitempty"`
-	Sauce         *Sauce     `json:"sauce,omitempty"`
-	Hyperlink     *Hyperlink `json:"hyperlink,omitempty"` // OSC 8 hyperlink
+	Type          TokenType     `json:"type"`
+	Pos           int           `json:"pos"`
+	Scope         SequenceScope `json:"scope,omitempty"`
+	Line          int           `json:"line,omitempty"`
+	Comment       string        `json:"comment,omitempty"`
+	Raw           string        `json:"raw"`
+	Value         string        `json:"value,omitempty"`
+	Parameters    []string      `json:"parameters,omitempty"`
+	C0Code        byte          `json:"c0_code,omitempty"`
+	C1Code        string        `json:"c1_code,omitempty"`
+	CSINotation   string        `json:"csi_notation,omitempty"`
+	Signification string        `json:"signification,omitempty"`
+	Sauce         *Sauce        `json:"sauce,omitempty"`
+	Hyperlink     *Hyperlink    `json:"hyperlink,omitempty"` // OSC 8 hyperlink
 }
 
 // C0 control codes names
@@ -183,6 +266,8 @@ func (t Token) String() string {
 		return "OSC: " + t.Raw
 	case TokenEscape:
 		return "ESC: " + t.Raw
+	case TokenSequenceComment:
+		return "COMMENT: " + t.Comment
 	default:
 		return "UNKNOWN"
 	}

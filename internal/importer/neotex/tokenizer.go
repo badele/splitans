@@ -30,6 +30,13 @@ package neotex
 //
 // Special:
 //   R0 = Reset all styles
+//   CS = Clear screen (CSI 2 J)
+//   GH = Go Home (CSI H)
+//
+// Scope:
+//   VT = sequences apply to VirtualTerminal (default)
+//   EX = sequences emitted only in export ANSI
+//   VX = sequences apply to both VT and export
 //
 // Examples:
 //   14:Fr, ED      -> Position 14: Foreground Red, Bold ON
@@ -43,22 +50,46 @@ package neotex
 import (
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/badele/splitans/internal/importer/ansi"
 	"github.com/badele/splitans/internal/types"
 )
 
 type Tokenizer struct {
-	textLines  []string         // Lignes de texte (sans \n)
-	seqLines   []string         // Lignes de séquences (sans \n)
-	Tokens     []types.Token    `json:"tokens"`
-	Stats      types.TokenStats `json:"stats"`
-	meta       *NeotexMetadata
-	pos        int
-	legacyMode bool
+	textLines   []string         // Lignes de texte (sans \n)
+	seqLines    []string         // Lignes de séquences (sans \n)
+	seqComments []string         // Commentaires de séquences (par ligne)
+	Tokens      []types.Token    `json:"tokens"`
+	Stats       types.TokenStats `json:"stats"`
+	meta        *NeotexMetadata
+	pos         int
+	legacyMode  bool
+}
+
+func stripSequenceComment(seqLine string) (string, string) {
+	if seqLine == "" {
+		return "", ""
+	}
+	inHyperlink := false
+	for i := 0; i < len(seqLine); i++ {
+		if !inHyperlink && strings.HasPrefix(seqLine[i:], "HL:<") {
+			inHyperlink = true
+			i += len("HL:<") - 1
+			continue
+		}
+		if inHyperlink {
+			if seqLine[i] == '>' {
+				inHyperlink = false
+			}
+			continue
+		}
+		if seqLine[i] == '#' {
+			clean := strings.TrimRight(seqLine[:i], " ")
+			return clean, seqLine[i:]
+		}
+	}
+	return strings.TrimRight(seqLine, " "), ""
 }
 
 // parseHoverColorValue parse code (without HF/HB prefix) into ColorValue.
@@ -278,10 +309,18 @@ func NewNeotexTokenizer(data []byte, width int, legacyMode bool) (parsedWidth in
 		return parsedWidth, nil, err
 	}
 
+	seqComments := make([]string, len(seqLines))
+	for i, seqLine := range seqLines {
+		clean, comment := stripSequenceComment(seqLine)
+		seqLines[i] = clean
+		seqComments[i] = comment
+	}
+
 	return parsedWidth, &Tokenizer{
-		textLines: textLines,
-		seqLines:  seqLines,
-		Tokens:    make([]types.Token, 0),
+		textLines:   textLines,
+		seqLines:    seqLines,
+		seqComments: seqComments,
+		Tokens:      make([]types.Token, 0),
 		Stats: types.TokenStats{
 			TokensByType: make(map[types.TokenType]int),
 			SGRCodes:     make(map[string]int),
@@ -395,23 +434,24 @@ func (t *Tokenizer) Tokenize() []types.Token {
 	}
 	t.meta = &meta
 
-	// Convert neotex format to ANSI format (for base tokens)
-	ansiData, err := ConvertNeotexToANSI(t.textLines, t.seqLines, meta.Palette, t.legacyMode)
+	// Convert neotex format directly to tokens
+	neotexTokens, err := ConvertNeotexToTokens(t.textLines, t.seqLines, meta.Palette, t.legacyMode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing neotex: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Use the existing ANSI tokenizer
-	ansiTokenizer := ansi.NewANSITokenizer(ansiData)
-	ansiTokens := ansiTokenizer.Tokenize()
-	t.Stats = ansiTokenizer.GetStats()
-
-	// Start with ANSI tokens
-	t.Tokens = append([]types.Token{}, ansiTokens...)
-
-	// Append hover tokens parsed directly from neotex sequences
-	t.appendHoverTokens(meta.Palette)
+	t.Tokens = append([]types.Token{}, neotexTokens...)
+	for lineIdx, comment := range t.seqComments {
+		if comment == "" {
+			continue
+		}
+		t.Tokens = append(t.Tokens, types.Token{
+			Type:    types.TokenSequenceComment,
+			Line:    lineIdx,
+			Comment: comment,
+		})
+	}
 
 	// If SAUCE metadata was found, add a TokenSauce token
 	if meta.Sauce != nil {
@@ -424,7 +464,7 @@ func (t *Tokenizer) Tokenize() []types.Token {
 		t.Tokens = append(t.Tokens, sauceToken)
 	}
 
-	// Recompute stats including hover and sauce tokens
+	// Recompute stats including sauce tokens
 	t.calculateStats()
 
 	return t.Tokens
@@ -489,91 +529,4 @@ func (t *Tokenizer) calculateStats() {
 			t.Stats.C1Codes[token.C1Code]++
 		}
 	}
-}
-
-// appendHoverTokens parses HF/HB codes from seqLines and appends TokenHoverFg/TokenHoverBg tokens.
-// Positions are derived from line offsets so that ordering matches the original text stream.
-func (t *Tokenizer) appendHoverTokens(palette map[int]types.ColorValue) {
-	hoverTokens := make([]types.Token, 0)
-	offset := 0
-
-	for lineIdx, line := range t.seqLines {
-		if line == "" {
-			offset += len([]rune(t.textLines[lineIdx]))
-			continue
-		}
-		entries := splitNeotexEntries(line)
-		for _, entry := range entries {
-			entry = strings.TrimSpace(entry)
-			if entry == "" || strings.HasPrefix(entry, "!") {
-				continue
-			}
-			parts := strings.SplitN(entry, ":", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			stylesStr := strings.TrimSpace(parts[1])
-			styleList := strings.Split(stylesStr, ",")
-			for _, style := range styleList {
-				style = strings.TrimSpace(style)
-				if style == "" {
-					continue
-				}
-				if strings.HasPrefix(style, "HFP") || strings.HasPrefix(style, "HBP") {
-					idxStr := strings.TrimPrefix(strings.TrimPrefix(style, "HFP"), "HBP")
-					idx, err := strconv.Atoi(idxStr)
-					if err != nil || idx < 0 {
-						continue
-					}
-					color, ok := palette[idx]
-					if !ok {
-						continue
-					}
-					if strings.HasPrefix(style, "HFP") {
-						hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
-					} else {
-						hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
-					}
-					continue
-				}
-				if strings.HasPrefix(style, "HF") {
-					if color := parseHoverColorValue(style[2:]); color != nil {
-						switch color.Type {
-						case types.ColorStandard:
-							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"std", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
-						case types.ColorIndexed:
-							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"idx", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
-						case types.ColorRGB:
-							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverFg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
-						}
-					}
-					continue
-				}
-				if strings.HasPrefix(style, "HB") {
-					if color := parseHoverColorValue(style[2:]); color != nil {
-						switch color.Type {
-						case types.ColorStandard:
-							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"std", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
-						case types.ColorIndexed:
-							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"idx", fmt.Sprintf("%d", color.Index)}, Pos: offset, Raw: style})
-						case types.ColorRGB:
-							hoverTokens = append(hoverTokens, types.Token{Type: types.TokenHoverBg, Parameters: []string{"rgb", fmt.Sprintf("%d", color.R), fmt.Sprintf("%d", color.G), fmt.Sprintf("%d", color.B)}, Pos: offset, Raw: style})
-						}
-					}
-					continue
-				}
-			}
-		}
-		offset += len([]rune(t.textLines[lineIdx]))
-	}
-
-	if len(hoverTokens) == 0 {
-		return
-	}
-
-	// Fusionner et trier par position pour conserver l'ordre du flux
-	t.Tokens = append(t.Tokens, hoverTokens...)
-	sort.SliceStable(t.Tokens, func(i, j int) bool {
-		return t.Tokens[i].Pos < t.Tokens[j].Pos
-	})
 }

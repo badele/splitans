@@ -73,6 +73,28 @@ type SGRSequence struct {
 	SGR      *SGR // The SGR sequence to apply from this position
 }
 
+// SequenceOpKind identifies the operation kind for ordered sequences.
+type SequenceOpKind int
+
+const (
+	SequenceOpSGR SequenceOpKind = iota
+	SequenceOpHyperlink
+	SequenceOpControl
+)
+
+// SequenceOp represents an ordered sequence operation at a position.
+// The Scope determines whether it is emitted to export (EX/VX) and/or
+// applied to the virtual terminal (VT/VX).
+type SequenceOp struct {
+	Position  int
+	Order     int
+	Kind      SequenceOpKind
+	Scope     SequenceScope
+	SGR       *SGR
+	Hyperlink *Hyperlink
+	Control   string
+}
+
 // HyperlinkSequence represents a hyperlink state change at a specific position
 type HyperlinkSequence struct {
 	Position  int        // Position of the character in the line (0-indexed)
@@ -84,6 +106,8 @@ type LineWithSequences struct {
 	Text               string
 	Sequences          []SGRSequence
 	HyperlinkSequences []HyperlinkSequence
+	OrderedSequences   []SequenceOp
+	Comment            string
 }
 
 // ============================================================================

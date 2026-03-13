@@ -2,6 +2,7 @@ package processor
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -19,7 +20,12 @@ type VirtualTerminal struct {
 	cursorX          int
 	cursorY          int
 	currentSGR       *types.SGR
+	exportSGR        *types.SGR
 	currentHyperlink *types.Hyperlink // Current active hyperlink (OSC 8)
+	exportHyperlink  *types.Hyperlink
+	sequenceOps      [][]types.SequenceOp
+	sequenceOrder    []int
+	lineComments     []string
 	savedCursorX     int
 	savedCursorY     int
 	outputEncoding   string
@@ -56,6 +62,9 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 			buffer[i][j] = types.NewCell()
 		}
 	}
+	sequenceOps := make([][]types.SequenceOp, height)
+	sequenceOrder := make([]int, height)
+	lineComments := make([]string, height)
 
 	return &VirtualTerminal{
 		buffer:         buffer,
@@ -64,6 +73,7 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 		cursorX:        0,
 		cursorY:        0,
 		currentSGR:     defaultSGR,
+		exportSGR:      defaultSGR.Copy(),
 		outputEncoding: outputEncoding,
 		useVGAColors:   useVGAColors,
 		legacyMode:     legacyMode,
@@ -71,6 +81,9 @@ func NewVirtualTerminal(width, height int, outputEncoding string, useVGAColors b
 		debugSGR:       false,
 		lastWrapped:    false,
 		ignoreWrapCRLF: true,
+		sequenceOps:    sequenceOps,
+		sequenceOrder:  sequenceOrder,
+		lineComments:   lineComments,
 	}
 }
 
@@ -164,6 +177,7 @@ func (vt *VirtualTerminal) exportSplitTextAndSequences(trimTrailing bool) []type
 			Text:               "",
 			Sequences:          []types.SGRSequence{},
 			HyperlinkSequences: []types.HyperlinkSequence{},
+			OrderedSequences:   []types.SequenceOp{},
 		}
 
 		var textBuilder strings.Builder
@@ -229,6 +243,20 @@ func (vt *VirtualTerminal) exportSplitTextAndSequences(trimTrailing bool) []type
 		}
 
 		line.Text = textBuilder.String()
+		if y < len(vt.lineComments) {
+			line.Comment = vt.lineComments[y]
+		}
+		if y < len(vt.sequenceOps) {
+			line.OrderedSequences = append(line.OrderedSequences, vt.sequenceOps[y]...)
+			if len(line.OrderedSequences) > 1 {
+				sort.SliceStable(line.OrderedSequences, func(i, j int) bool {
+					if line.OrderedSequences[i].Position == line.OrderedSequences[j].Position {
+						return line.OrderedSequences[i].Order < line.OrderedSequences[j].Order
+					}
+					return line.OrderedSequences[i].Position < line.OrderedSequences[j].Position
+				})
+			}
+		}
 
 		result = append(result, line)
 	}
@@ -354,7 +382,30 @@ func (vt *VirtualTerminal) Crop(x, y, width, height int) *VirtualTerminal {
 		}
 	}
 
-	return NewVirtualTerminalFromCells(cells, vt.outputEncoding, vt.useVGAColors, vt.legacyMode)
+	newVT := NewVirtualTerminalFromCells(cells, vt.outputEncoding, vt.useVGAColors, vt.legacyMode)
+	newVT.sequenceOps = make([][]types.SequenceOp, height)
+	newVT.sequenceOrder = make([]int, height)
+	newVT.lineComments = make([]string, height)
+	for dy := 0; dy < height; dy++ {
+		srcY := y + dy
+		if srcY >= len(vt.sequenceOps) {
+			continue
+		}
+		for _, seq := range vt.sequenceOps[srcY] {
+			if seq.Position < x || seq.Position >= x+width {
+				continue
+			}
+			seqCopy := seq
+			seqCopy.Position = seq.Position - x
+			newVT.sequenceOps[dy] = append(newVT.sequenceOps[dy], seqCopy)
+		}
+		newVT.sequenceOrder[dy] = len(newVT.sequenceOps[dy])
+		if srcY < len(vt.lineComments) {
+			newVT.lineComments[dy] = vt.lineComments[srcY]
+		}
+	}
+
+	return newVT
 }
 
 // Paste copies the content of source into the current VT at position (x, y).
@@ -405,58 +456,92 @@ func (vt *VirtualTerminal) Fill(char rune, sgr *types.SGR) {
 // ============================================================================
 
 func (vt *VirtualTerminal) applyToken(token types.Token) error {
+	scope := token.Scope.Normalize()
+	applyToVT := scope.IncludesVT()
+	recordOp := scope.IncludesVT() || scope.IncludesExport()
+
 	switch token.Type {
 	case types.TokenText:
 		vt.writeText(token.Value)
 
 	case types.TokenC0:
-		vt.handleC0(token.C0Code)
+		if applyToVT {
+			vt.handleC0(token.C0Code)
+		}
 
 	case types.TokenSGR:
-		vt.handleSGR(token.Parameters)
+		if applyToVT {
+			vt.handleSGR(token.Parameters)
+		}
+		if recordOp {
+			vt.applySGRToExport(token.Parameters)
+			vt.recordSequenceOp(types.SequenceOp{
+				Kind:  types.SequenceOpSGR,
+				Scope: scope,
+				SGR:   vt.exportSGR.Copy(),
+			})
+		}
 
 	case types.TokenHoverFg:
 		if len(token.Parameters) >= 2 {
-			switch token.Parameters[0] {
-			case "std":
-				idx, _ := strconv.Atoi(token.Parameters[1])
-				vt.currentSGR.LinkFgColor = types.ColorValue{Type: types.ColorStandard, Index: uint8(idx)}
-			case "idx":
-				idx, _ := strconv.Atoi(token.Parameters[1])
-				vt.currentSGR.LinkFgColor = types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
-			case "rgb":
-				if len(token.Parameters) == 4 {
-					r := parseByteString(token.Parameters[1])
-					g := parseByteString(token.Parameters[2])
-					b := parseByteString(token.Parameters[3])
-					vt.currentSGR.LinkFgColor = types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
-				}
+			if applyToVT {
+				vt.applyHoverToSGR(vt.currentSGR, token, true)
+			}
+			if recordOp {
+				vt.applyHoverToSGR(vt.exportSGR, token, true)
+				vt.recordSequenceOp(types.SequenceOp{
+					Kind:  types.SequenceOpSGR,
+					Scope: scope,
+					SGR:   vt.exportSGR.Copy(),
+				})
 			}
 		}
 	case types.TokenHoverBg:
 		if len(token.Parameters) >= 2 {
-			switch token.Parameters[0] {
-			case "std":
-				idx, _ := strconv.Atoi(token.Parameters[1])
-				vt.currentSGR.LinkBgColor = types.ColorValue{Type: types.ColorStandard, Index: uint8(idx)}
-			case "idx":
-				idx, _ := strconv.Atoi(token.Parameters[1])
-				vt.currentSGR.LinkBgColor = types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
-			case "rgb":
-				if len(token.Parameters) == 4 {
-					r := parseByteString(token.Parameters[1])
-					g := parseByteString(token.Parameters[2])
-					b := parseByteString(token.Parameters[3])
-					vt.currentSGR.LinkBgColor = types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
-				}
+			if applyToVT {
+				vt.applyHoverToSGR(vt.currentSGR, token, false)
+			}
+			if recordOp {
+				vt.applyHoverToSGR(vt.exportSGR, token, false)
+				vt.recordSequenceOp(types.SequenceOp{
+					Kind:  types.SequenceOpSGR,
+					Scope: scope,
+					SGR:   vt.exportSGR.Copy(),
+				})
 			}
 		}
 
 	case types.TokenCSI:
-		vt.handleCSI(token)
+		if applyToVT {
+			vt.handleCSI(token)
+		}
+		if recordOp {
+			if control, ok := parseControlCode(token); ok {
+				vt.recordSequenceOp(types.SequenceOp{
+					Kind:    types.SequenceOpControl,
+					Scope:   scope,
+					Control: control,
+				})
+			}
+		}
 
 	case types.TokenOSC:
-		vt.handleOSC(token)
+		if applyToVT {
+			vt.handleOSC(token)
+		}
+		if recordOp {
+			vt.applyHyperlinkToExport(token)
+			vt.recordSequenceOp(types.SequenceOp{
+				Kind:      types.SequenceOpHyperlink,
+				Scope:     scope,
+				Hyperlink: vt.exportHyperlink,
+			})
+		}
+
+	case types.TokenSequenceComment:
+		if token.Line >= 0 && token.Line < len(vt.lineComments) {
+			vt.lineComments[token.Line] = token.Comment
+		}
 	}
 
 	return nil
@@ -471,6 +556,136 @@ func parseByteString(s string) uint8 {
 		return 255
 	}
 	return uint8(v)
+}
+
+func (vt *VirtualTerminal) recordSequenceOp(op types.SequenceOp) {
+	line := vt.cursorY
+	if line < 0 || line >= vt.height {
+		return
+	}
+	if vt.width <= 0 {
+		return
+	}
+	pos := vt.cursorX
+	if pos < 0 {
+		pos = 0
+	}
+	if pos >= vt.width {
+		pos = vt.width - 1
+	}
+	op.Scope = op.Scope.Normalize()
+	op.Position = pos
+	op.Order = vt.sequenceOrder[line]
+	if op.SGR != nil {
+		op.SGR = op.SGR.Copy()
+	}
+	if op.Hyperlink != nil {
+		op.Hyperlink = op.Hyperlink.Copy()
+	}
+	vt.sequenceOps[line] = append(vt.sequenceOps[line], op)
+	vt.sequenceOrder[line]++
+}
+
+func (vt *VirtualTerminal) applySGRToExport(params []string) {
+	if vt.exportSGR == nil {
+		vt.exportSGR = types.NewSGR()
+	}
+	intParams := make([]int, 0, len(params))
+	for _, p := range params {
+		if p == "" {
+			intParams = append(intParams, 0)
+			continue
+		}
+		val, err := strconv.Atoi(p)
+		if err == nil {
+			intParams = append(intParams, val)
+		}
+	}
+	if len(intParams) == 0 {
+		vt.exportSGR.Reset()
+		return
+	}
+	vt.exportSGR.ApplyParams(intParams)
+}
+
+func (vt *VirtualTerminal) applyHoverToSGR(target *types.SGR, token types.Token, isFg bool) {
+	if target == nil || len(token.Parameters) < 2 {
+		return
+	}
+	switch token.Parameters[0] {
+	case "std":
+		idx, _ := strconv.Atoi(token.Parameters[1])
+		color := types.ColorValue{Type: types.ColorStandard, Index: uint8(idx)}
+		if isFg {
+			target.LinkFgColor = color
+		} else {
+			target.LinkBgColor = color
+		}
+	case "idx":
+		idx, _ := strconv.Atoi(token.Parameters[1])
+		color := types.ColorValue{Type: types.ColorIndexed, Index: uint8(idx)}
+		if isFg {
+			target.LinkFgColor = color
+		} else {
+			target.LinkBgColor = color
+		}
+	case "rgb":
+		if len(token.Parameters) == 4 {
+			r := parseByteString(token.Parameters[1])
+			g := parseByteString(token.Parameters[2])
+			b := parseByteString(token.Parameters[3])
+			color := types.ColorValue{Type: types.ColorRGB, R: r, G: g, B: b}
+			if isFg {
+				target.LinkFgColor = color
+			} else {
+				target.LinkBgColor = color
+			}
+		}
+	}
+}
+
+func (vt *VirtualTerminal) applyHyperlinkToExport(token types.Token) {
+	if token.Hyperlink == nil || token.Hyperlink.URL == "" {
+		vt.exportHyperlink = nil
+		return
+	}
+	vt.exportHyperlink = token.Hyperlink.Copy()
+}
+
+func parseControlCode(token types.Token) (string, bool) {
+	if len(token.Raw) == 0 {
+		return "", false
+	}
+	lastChar := token.Raw[len(token.Raw)-1]
+	switch lastChar {
+	case 'J':
+		mode := 0
+		if len(token.Parameters) > 0 {
+			mode, _ = strconv.Atoi(token.Parameters[0])
+		}
+		if mode == 2 {
+			return "CS", true
+		}
+	case 'H', 'f':
+		row, col := 1, 1
+		params := make([]string, len(token.Parameters))
+		copy(params, token.Parameters)
+		for i := 0; i < len(params); i++ {
+			if params[i] == "" {
+				params[i] = "1"
+			}
+		}
+		if len(params) > 1 {
+			row, _ = strconv.Atoi(params[0])
+			col, _ = strconv.Atoi(params[1])
+		} else if len(params) > 0 {
+			row, _ = strconv.Atoi(params[0])
+		}
+		if row == 1 && col == 1 {
+			return "GH", true
+		}
+	}
+	return "", false
 }
 
 func (vt *VirtualTerminal) writeText(text string) {
@@ -834,46 +1049,113 @@ func (vt *VirtualTerminal) exportFlattenedANSI(inline bool, trimTrailing bool) s
 	for _, line := range lines {
 		var lineBuilder strings.Builder
 		textRunes := []rune(line.Text)
+		if len(line.OrderedSequences) == 0 {
+			seqIndex := 0
+			hyperlinkSeqIndex := 0
+			for i, r := range textRunes {
+				// Check if there's a SGR change at this position
+				if seqIndex < len(line.Sequences) && line.Sequences[seqIndex].Position == i {
+					newSGR := line.Sequences[seqIndex].SGR
 
-		seqIndex := 0
-		hyperlinkSeqIndex := 0
-		for i, r := range textRunes {
-			// Check if there's a SGR change at this position
-			if seqIndex < len(line.Sequences) && line.Sequences[seqIndex].Position == i {
-				newSGR := line.Sequences[seqIndex].SGR
-
-				// Generate differential ANSI sequence (legacyMode controls ANSI 1990 compatibility)
-				diffSequence := newSGR.DiffToANSI(currentSGR, vt.useVGAColors, vt.legacyMode)
-				if diffSequence != "" {
-					lineBuilder.WriteString(diffSequence)
-				}
-
-				// Update current state
-				currentSGR = newSGR.Copy()
-				seqIndex++
-			}
-
-			// Check if there's a hyperlink change at this position
-			// Skip hyperlink handling for CP437 encoding as OSC 8 was not supported in 1990s ANSI terminals
-			if vt.outputEncoding != "cp437" {
-				if hyperlinkSeqIndex < len(line.HyperlinkSequences) && line.HyperlinkSequences[hyperlinkSeqIndex].Position == i {
-					newHyperlink := line.HyperlinkSequences[hyperlinkSeqIndex].Hyperlink
-
-					// Generate OSC 8 sequence
-					osc8Seq := hyperlinkToOSC8(newHyperlink)
-					lineBuilder.WriteString(osc8Seq)
+					// Generate differential ANSI sequence (legacyMode controls ANSI 1990 compatibility)
+					diffSequence := newSGR.DiffToANSI(currentSGR, vt.useVGAColors, vt.legacyMode)
+					if diffSequence != "" {
+						lineBuilder.WriteString(diffSequence)
+					}
 
 					// Update current state
-					if newHyperlink != nil {
-						currentHyperlink = newHyperlink.Copy()
-					} else {
-						currentHyperlink = nil
-					}
-					hyperlinkSeqIndex++
+					currentSGR = newSGR.Copy()
+					seqIndex++
 				}
-			}
 
-			lineBuilder.WriteRune(r)
+				// Check if there's a hyperlink change at this position
+				// Skip hyperlink handling for CP437 encoding as OSC 8 was not supported in 1990s ANSI terminals
+				if vt.outputEncoding != "cp437" {
+					if hyperlinkSeqIndex < len(line.HyperlinkSequences) && line.HyperlinkSequences[hyperlinkSeqIndex].Position == i {
+						newHyperlink := line.HyperlinkSequences[hyperlinkSeqIndex].Hyperlink
+
+						// Generate OSC 8 sequence
+						osc8Seq := hyperlinkToOSC8(newHyperlink)
+						lineBuilder.WriteString(osc8Seq)
+
+						// Update current state
+						if newHyperlink != nil {
+							currentHyperlink = newHyperlink.Copy()
+						} else {
+							currentHyperlink = nil
+						}
+						hyperlinkSeqIndex++
+					}
+				}
+
+				lineBuilder.WriteRune(r)
+			}
+		} else {
+			opIndex := 0
+			ops := line.OrderedSequences
+			for i, r := range textRunes {
+				for opIndex < len(ops) && ops[opIndex].Position == i {
+					op := ops[opIndex]
+					switch op.Kind {
+					case types.SequenceOpControl:
+						if op.Scope.IncludesExport() {
+							if seq, ok := controlCodeToANSI(op.Control); ok {
+								lineBuilder.WriteString(seq)
+							}
+						}
+					case types.SequenceOpSGR:
+						if op.SGR != nil {
+							diffSequence := op.SGR.DiffToANSI(currentSGR, vt.useVGAColors, vt.legacyMode)
+							if diffSequence != "" {
+								lineBuilder.WriteString(diffSequence)
+							}
+							currentSGR = op.SGR.Copy()
+						}
+					case types.SequenceOpHyperlink:
+						if vt.outputEncoding != "cp437" {
+							osc8Seq := hyperlinkToOSC8(op.Hyperlink)
+							lineBuilder.WriteString(osc8Seq)
+							if op.Hyperlink != nil {
+								currentHyperlink = op.Hyperlink.Copy()
+							} else {
+								currentHyperlink = nil
+							}
+						}
+					}
+					opIndex++
+				}
+				lineBuilder.WriteRune(r)
+			}
+			for opIndex < len(ops) {
+				op := ops[opIndex]
+				switch op.Kind {
+				case types.SequenceOpControl:
+					if op.Scope.IncludesExport() {
+						if seq, ok := controlCodeToANSI(op.Control); ok {
+							lineBuilder.WriteString(seq)
+						}
+					}
+				case types.SequenceOpSGR:
+					if op.SGR != nil {
+						diffSequence := op.SGR.DiffToANSI(currentSGR, vt.useVGAColors, vt.legacyMode)
+						if diffSequence != "" {
+							lineBuilder.WriteString(diffSequence)
+						}
+						currentSGR = op.SGR.Copy()
+					}
+				case types.SequenceOpHyperlink:
+					if vt.outputEncoding != "cp437" {
+						osc8Seq := hyperlinkToOSC8(op.Hyperlink)
+						lineBuilder.WriteString(osc8Seq)
+						if op.Hyperlink != nil {
+							currentHyperlink = op.Hyperlink.Copy()
+						} else {
+							currentHyperlink = nil
+						}
+					}
+				}
+				opIndex++
+			}
 		}
 
 		lineText := lineBuilder.String()
@@ -899,6 +1181,17 @@ func (vt *VirtualTerminal) exportFlattenedANSI(inline bool, trimTrailing bool) s
 	}
 
 	return builder.String()
+}
+
+func controlCodeToANSI(code string) (string, bool) {
+	switch code {
+	case "CS":
+		return "\x1b[2J", true
+	case "GH":
+		return "\x1b[H", true
+	default:
+		return "", false
+	}
 }
 
 // hyperlinkToOSC8 converts a Hyperlink to an OSC 8 escape sequence.

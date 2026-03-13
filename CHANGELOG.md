@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.0](https://github.com/badele/splitans/compare/v0.14.0...v0.15.0) (2026-03-13)
+
+
+### Features
+
+* add screen eraser and comment feature ([#57](https://github.com/badele/splitans/issues/57)) ([eff1f78](https://github.com/badele/splitans/commit/eff1f78b2d00eda50bfec844f22251e1e6fef613))
+
+
+### Bug Fixes
+
+* character delay ([#55](https://github.com/badele/splitans/issues/55)) ([9efb27b](https://github.com/badele/splitans/commit/9efb27b9d657116f014c2c53bac9d5a7af31f7be))
+
 ## [0.14.0](https://github.com/badele/splitans/compare/v0.13.0...v0.14.0) (2026-03-11)
 
 

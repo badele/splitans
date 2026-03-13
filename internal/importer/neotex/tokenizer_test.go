@@ -396,6 +396,7 @@ func TestExtractMetadataDelaySequences(t *testing.T) {
 		expectDuration time.Duration
 		expectMode     string
 		expectLines    []int
+		expectColumns  []int
 	}{
 		{
 			name:           "Delay char numeric",
@@ -404,6 +405,7 @@ func TestExtractMetadataDelaySequences(t *testing.T) {
 			expectDuration: 20 * time.Millisecond,
 			expectMode:     NeotexDelayChar,
 			expectLines:    []int{0},
+			expectColumns:  []int{0},
 		},
 		{
 			name:           "Delay line duration",
@@ -412,6 +414,7 @@ func TestExtractMetadataDelaySequences(t *testing.T) {
 			expectDuration: 120 * time.Millisecond,
 			expectMode:     NeotexDelayLine,
 			expectLines:    []int{0},
+			expectColumns:  []int{0},
 		},
 		{
 			name:           "Delay disabled",
@@ -420,6 +423,7 @@ func TestExtractMetadataDelaySequences(t *testing.T) {
 			expectDuration: 0,
 			expectMode:     "",
 			expectLines:    []int{0},
+			expectColumns:  []int{0},
 		},
 		{
 			name:           "Delay override",
@@ -428,6 +432,7 @@ func TestExtractMetadataDelaySequences(t *testing.T) {
 			expectDuration: 30 * time.Millisecond,
 			expectMode:     NeotexDelayLine,
 			expectLines:    []int{0, 1},
+			expectColumns:  []int{0, 0},
 		},
 		{
 			name:           "Delay both zero",
@@ -436,6 +441,7 @@ func TestExtractMetadataDelaySequences(t *testing.T) {
 			expectDuration: 0,
 			expectMode:     "",
 			expectLines:    []int{0, 0},
+			expectColumns:  []int{0, 3},
 		},
 		{
 			name:           "Delay not set",
@@ -468,6 +474,9 @@ func TestExtractMetadataDelaySequences(t *testing.T) {
 				for i, expectedLine := range tt.expectLines {
 					if meta.DelayChanges[i].Line != expectedLine {
 						t.Fatalf("DelayChanges[%d].Line: expected %d, got %d", i, expectedLine, meta.DelayChanges[i].Line)
+					}
+					if meta.DelayChanges[i].Column != tt.expectColumns[i] {
+						t.Fatalf("DelayChanges[%d].Column: expected %d, got %d", i, tt.expectColumns[i], meta.DelayChanges[i].Column)
 					}
 				}
 			} else if tt.expectExplicit && len(meta.DelayChanges) == 0 {

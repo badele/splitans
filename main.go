@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -86,6 +87,7 @@ const (
 
 type delayChange struct {
 	line     int
+	column   int
 	duration time.Duration
 	mode     delayMode
 }
@@ -171,8 +173,15 @@ func buildDelaySchedule(meta *neotex.NeotexMetadata) []delayChange {
 			duration = 0
 			mode = delayNone
 		}
-		schedule = append(schedule, delayChange{line: change.Line, duration: duration, mode: mode})
+		schedule = append(schedule, delayChange{line: change.Line, column: change.Column, duration: duration, mode: mode})
 	}
+
+	sort.SliceStable(schedule, func(i, j int) bool {
+		if schedule[i].line != schedule[j].line {
+			return schedule[i].line < schedule[j].line
+		}
+		return schedule[i].column < schedule[j].column
+	})
 
 	return schedule
 }
@@ -279,13 +288,69 @@ func writeWithDelaySchedule(writer io.Writer, content string, schedule []delayCh
 		if line == "" {
 			continue
 		}
+		for scheduleIdx < len(schedule) && schedule[scheduleIdx].line < lineIdx {
+			currentDuration = schedule[scheduleIdx].duration
+			currentMode = schedule[scheduleIdx].mode
+			scheduleIdx++
+		}
+
+		hasNewline := strings.HasSuffix(line, "\n")
+		lineContent := line
+		if hasNewline {
+			lineContent = strings.TrimSuffix(line, "\n")
+		}
+
+		column := 0
+		for scheduleIdx < len(schedule) && schedule[scheduleIdx].line == lineIdx && schedule[scheduleIdx].column == column {
+			currentDuration = schedule[scheduleIdx].duration
+			currentMode = schedule[scheduleIdx].mode
+			scheduleIdx++
+		}
+
+		for i := 0; i < len(lineContent); {
+			if lineContent[i] == 0x1b {
+				end := scanAnsiSequence(lineContent, i)
+				if _, err := writer.Write([]byte(lineContent[i:end])); err != nil {
+					return err
+				}
+				i = end
+				continue
+			}
+			r, size := utf8.DecodeRuneInString(lineContent[i:])
+			if r == utf8.RuneError && size == 1 {
+				size = 1
+			}
+			if _, err := writer.Write([]byte(lineContent[i : i+size])); err != nil {
+				return err
+			}
+			i += size
+			if currentMode == delayChar && currentDuration > 0 && r != ' ' && r != 0x00 && r != '\u2800' {
+				time.Sleep(currentDuration)
+			}
+			column++
+			for scheduleIdx < len(schedule) && schedule[scheduleIdx].line == lineIdx && schedule[scheduleIdx].column == column {
+				currentDuration = schedule[scheduleIdx].duration
+				currentMode = schedule[scheduleIdx].mode
+				scheduleIdx++
+			}
+		}
+
 		for scheduleIdx < len(schedule) && schedule[scheduleIdx].line == lineIdx {
 			currentDuration = schedule[scheduleIdx].duration
 			currentMode = schedule[scheduleIdx].mode
 			scheduleIdx++
 		}
-		if err := writeWithDelay(writer, line, currentDuration, currentMode); err != nil {
-			return err
+
+		if hasNewline {
+			if _, err := writer.Write([]byte("\n")); err != nil {
+				return err
+			}
+			if currentDuration > 0 {
+				switch currentMode {
+				case delayLine, delayChar:
+					time.Sleep(currentDuration)
+				}
+			}
 		}
 	}
 

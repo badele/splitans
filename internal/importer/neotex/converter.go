@@ -17,6 +17,7 @@ const (
 
 type NeotexDelayChange struct {
 	Line     int
+	Column   int
 	Duration time.Duration
 	Mode     string
 }
@@ -227,6 +228,11 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 				if len(parts) != 2 {
 					continue
 				}
+				position, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+				if err != nil || position <= 0 {
+					continue
+				}
+				position--
 				stylesStr := strings.TrimSpace(parts[1])
 				styleList := strings.Split(stylesStr, ",")
 				for _, style := range styleList {
@@ -249,6 +255,7 @@ func ExtractMetadata(seqLines []string) (NeotexMetadata, error) {
 					delayMode = mode
 					delayChanges = append(delayChanges, NeotexDelayChange{
 						Line:     lineIdx,
+						Column:   position,
 						Duration: duration,
 						Mode:     mode,
 					})

@@ -1031,6 +1031,18 @@ func TestStripSequenceComment(t *testing.T) {
 			expectedLine: "1:HL:<https://example.com/#frag>; 2:Fr",
 			expectedNote: "# end",
 		},
+		{
+			name:         "Palette with hash",
+			seqLine:      "!P1=#00FF00; 1:FP1",
+			expectedLine: "!P1=#00FF00; 1:FP1",
+			expectedNote: "",
+		},
+		{
+			name:         "Palette with hash and comment",
+			seqLine:      "!P1=#00FF00; 1:FP1 # note",
+			expectedLine: "!P1=#00FF00; 1:FP1",
+			expectedNote: "# note",
+		},
 	}
 
 	for _, tt := range tests {

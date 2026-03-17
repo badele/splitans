@@ -85,6 +85,9 @@ func stripSequenceComment(seqLine string) (string, string) {
 			continue
 		}
 		if seqLine[i] == '#' {
+			if i > 0 && seqLine[i-1] != ' ' && seqLine[i-1] != '\t' {
+				continue
+			}
 			clean := strings.TrimRight(seqLine[:i], " ")
 			return clean, seqLine[i:]
 		}

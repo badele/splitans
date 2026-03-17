@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/badele/splitans/compare/v0.15.0...v0.15.1) (2026-03-17)
+
+
+### Bug Fixes
+
+* palette tokenizer ([#58](https://github.com/badele/splitans/issues/58)) ([27c453d](https://github.com/badele/splitans/commit/27c453db40acae926f7044018fd3fb9880415183))
+
 ## [0.15.0](https://github.com/badele/splitans/compare/v0.14.0...v0.15.0) (2026-03-13)
 
 

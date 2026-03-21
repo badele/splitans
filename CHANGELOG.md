@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0](https://github.com/badele/splitans/compare/v0.15.1...v0.16.0) (2026-03-21)
+
+
+### Features
+
+* add splitansx tool ([#62](https://github.com/badele/splitans/issues/62)) ([f2f2d26](https://github.com/badele/splitans/commit/f2f2d26eefb185190ae7c8ec5dda1a252dd729c4))
+* update html font ([#60](https://github.com/badele/splitans/issues/60)) ([c508b43](https://github.com/badele/splitans/commit/c508b431315b86e38a7c090b4336290edfbc5a66))
+
 ## [0.15.1](https://github.com/badele/splitans/compare/v0.15.0...v0.15.1) (2026-03-17)
 
 

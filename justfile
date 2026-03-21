@@ -27,12 +27,12 @@ go-init:
 # build project
 [group('golang')]
 @go-build: go-init
-  go build
+  go build -o . ./cmd/...
 
 # install go project
 [group('golang')]
 @go-install: go-init
-  go install
+  go install ./cmd/...
 
 # Test project
 [group('golang')]

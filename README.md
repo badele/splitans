@@ -13,7 +13,7 @@ JSON.
 
 ```bash
 export PATH="$HOME/go/bin:$PATH"
-go install github.com/badele/splitans
+go install github.com/badele/splitans/cmd/...@latest
 ```
 
 ## Usage
@@ -54,14 +54,23 @@ cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -D 50ms:c
 cat /tmp/WWANS157.neo | splitans -f neotex -F ansi -D 120ms:l
 ```
 
+## Splitansx
+
+`splitansx` reads neotex input from stdin, detects the ` | !Vx.y.z;` marker on
+the first non-comment line, and re-executes the matching `splitans` version.
+Versions are cached under `~/.cache/splitans/<version>`.
+
+```bash
+cat /tmp/WWANS157.neo | splitansx -F ansi
+```
+
 ## Neotex Metadata
 
 Metadata entries live in the sequence column and start with `!` (for example
-`!V1.2.0`, `!TW73/80`, `!NL42`, or SAUCE labels like
-`!STTitle`). Use the short form `!KEYvalue` when the value has no separators,
-and the protected form `!KEY<value>` when it contains spaces or characters such
-as `;`, `,`, or `:`. Metadata values must not contain `<` or `>`; those are
-rejected on import.
+`!V1.2.0`, `!TW73/80`, `!NL42`, or SAUCE labels like `!STTitle`). Use the short
+form `!KEYvalue` when the value has no separators, and the protected form
+`!KEY<value>` when it contains spaces or characters such as `;`, `,`, or `:`.
+Metadata values must not contain `<` or `>`; those are rejected on import.
 
 Delay sequences live alongside regular codes in the sequence column:
 

@@ -30,7 +30,7 @@ cd splitans
 go mod download
 
 # Build
-go build -o splitans .
+go build -o . ./cmd/...
 
 # Run
 ./splitans
@@ -250,7 +250,7 @@ above.
 
 ```bash
 # Edit files
-vim main.go
+vim cmd/splitans/main.go
 ```
 
 ### 2. Test locally
@@ -260,7 +260,7 @@ vim main.go
 go test -v ./...
 
 # Build
-go build
+go build -o . ./cmd/splitans
 ```
 
 ### 3. Commit with conventional format
@@ -280,7 +280,7 @@ The pre-commit hooks will:
 ### 4. Push and create PR
 
 ```bash
-git push origin main
+git push origin branc-name
 ```
 
 ## CI/CD Pipeline

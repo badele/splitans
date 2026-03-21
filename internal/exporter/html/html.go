@@ -97,7 +97,7 @@ const baseCSS = `    :root { --bg: #000; --fg: #c0c0c0; }
       margin: 0;
       background: var(--bg);
       color: var(--fg);
-      font-family: 'Web437_ToshibaSat_8x14', monospace;
+      font-family: 'Web437_ToshibaSat_8x14';
       font-size: 28px;
       font-style: normal;
       line-height: 1.2;
@@ -115,7 +115,7 @@ const baseCSS = `    :root { --bg: #000; --fg: #c0c0c0; }
     #neo-source { display: none; }
     #ansi-output {
       white-space: pre;
-      font-family: 'Web437_ToshibaSat_8x14', monospace;
+      font-family: 'Web437_ToshibaSat_8x14';
       font-size: 28px;
       font-style: normal;
       line-height: 1.2;
@@ -144,7 +144,7 @@ const baseCSS = `    :root { --bg: #000; --fg: #c0c0c0; }
       border: 1px solid #222;
       border-radius: 6px;
       font-size: 12px;
-      font-family: 'Web437_ToshibaSat_8x14', monospace;
+      font-family: 'Web437_ToshibaSat_8x14';
       pointer-events: auto;
     }
     #options-bar label { display: inline-flex; align-items: center; gap: 4px; }

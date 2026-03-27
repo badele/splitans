@@ -36,6 +36,14 @@ func TestExportHTML(t *testing.T) {
 	if !strings.Contains(out, "ansi-link:hover") {
 		t.Fatalf("hover rule missing")
 	}
+
+	if !strings.Contains(out, "crt-toggle") {
+		t.Fatalf("crt toggle missing")
+	}
+
+	if !strings.Contains(out, "crt-overlay") {
+		t.Fatalf("crt overlay missing")
+	}
 }
 
 func TestExportHTMLPack(t *testing.T) {
@@ -60,5 +68,14 @@ func TestExportHTMLPack(t *testing.T) {
 	}
 	if !strings.Contains(files.CSS, "ansi-link:hover") {
 		t.Fatalf("pack css missing hover rule")
+	}
+	if !strings.Contains(files.HTML, "crt-toggle") {
+		t.Fatalf("pack html missing crt toggle")
+	}
+	if !strings.Contains(files.HTML, "crt-overlay") {
+		t.Fatalf("pack html missing crt overlay")
+	}
+	if !strings.Contains(files.CSS, ".crt-overlay") {
+		t.Fatalf("pack css missing crt styles")
 	}
 }

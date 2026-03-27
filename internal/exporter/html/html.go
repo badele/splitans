@@ -27,8 +27,10 @@ type PackFiles struct {
 }
 
 const optionsBarHTML = `<div id="options-bar">
+  <a class="home-link" href="./">Home</a>
   <label>Zoom <input id="zoom-range" type="range" min="7" max="64" step="7" value="14"></label>
   <label><input id="source-toggle" type="checkbox"> Source</label>
+  <label><input id="crt-toggle" type="checkbox"> CRT</label>
 </div>`
 
 //go:embed Web437_ToshibaSat_8x14.woff
@@ -55,6 +57,7 @@ var pageTemplate = template.Must(template.New("splitans-html").Parse(`<!doctype 
   </style>
 </head>
 <body>
+<div class="crt-overlay" id="crt-overlay"><div class="crt-scanlines"></div><div class="crt-vignette"></div></div>
 <pre id="neo-source">
 {{.Neotex}}
 </pre>
@@ -77,6 +80,7 @@ var packHTMLTemplate = template.Must(template.New("splitans-html-pack").Parse(`<
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="crt-overlay" id="crt-overlay"><div class="crt-scanlines"></div><div class="crt-vignette"></div></div>
 <pre id="neo-source">
 {{.Neotex}}
 </pre>
@@ -149,6 +153,54 @@ const baseCSS = `    :root { --bg: #000; --fg: #c0c0c0; }
     }
     #options-bar label { display: inline-flex; align-items: center; gap: 4px; }
     #options-bar input[type="range"] { accent-color: #666; }
+    #options-bar a.home-link {
+      color: #0a0;
+      text-decoration: none;
+    }
+    #options-bar a.home-link:hover {
+      color: #0f0;
+      text-decoration: underline;
+    }
+    .crt-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 9998;
+      display: none;
+    }
+    .crt-overlay.active { display: block; }
+    .crt-overlay .crt-scanlines {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          rgba(0, 0, 0, 0) 0px,
+          rgba(0, 0, 0, 0.18) 2px,
+          rgba(0, 0, 0, 0) 4px
+        ),
+        repeating-linear-gradient(
+          90deg,
+          rgba(255, 0, 50, 0.06) 0px,
+          rgba(0, 255, 50, 0.06) 2px,
+          rgba(50, 80, 255, 0.06) 4px
+        );
+      background-size: 100% 6px, 6px 100%;
+    }
+    .crt-overlay .crt-vignette {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(ellipse at center, transparent 65%, rgba(0, 0, 0, 0.45) 100%);
+    }
+    .crt-active #ansi-output {
+      text-shadow:
+        -1px 0 1px rgba(255, 0, 80, 0.35),
+        1px 0 1px rgba(0, 255, 180, 0.35),
+        0 0 5px rgba(0, 255, 100, 0.2),
+        0 0 12px rgba(180, 0, 255, 0.1),
+        0 0 25px rgba(0, 255, 100, 0.05);
+      animation: crt-flicker .5s infinite;
+    }
     .ansi-cell { color: var(--fg, inherit); background: var(--bg, transparent); text-decoration: none; }
     .ansi-link { text-decoration: none; }
     .ansi-link:hover {
@@ -160,6 +212,17 @@ const baseCSS = `    :root { --bg: #000; --fg: #c0c0c0; }
     .ansi-blink { animation: ansi-blink 1s step-end infinite; }
     .ansi-dim { opacity: 0.8; }
     .ansi-hidden { opacity: 0; }
+    @keyframes crt-flicker {
+      0% { opacity: 0.96; }
+      5% { opacity: 1; }
+      10% { opacity: 0.97; }
+      40% { opacity: 1; }
+      45% { opacity: 0.94; }
+      50% { opacity: 1; }
+      80% { opacity: 0.98; }
+      85% { opacity: 0.95; }
+      100% { opacity: 0.98; }
+    }
     @keyframes ansi-blink { 50% { opacity: 0.2; } }`
 
 const baseJS = `  const palette = [
@@ -468,6 +531,7 @@ const baseJS = `  const palette = [
   };
 
   let showSource = false;
+  const isExternalLink = (href) => /^(https?:|mailto:)/i.test(href);
 
   const renderLine = (text, seqLine, state, hyperlink, hoverFgState, hoverBgState, paletteMap) => {
     const styles = parseSequences(seqLine, paletteMap);
@@ -538,9 +602,12 @@ const baseJS = `  const palette = [
         if (part.state.dim) el.classList.add('ansi-dim');
         if (part.state.hidden) el.classList.add('ansi-hidden');
         if (part.hyperlink) {
-          el.href = part.hyperlink.url;
-          el.target = '_blank';
-          el.rel = 'noopener noreferrer';
+          const href = part.hyperlink.url;
+          el.href = href;
+          if (isExternalLink(href)) {
+            el.target = '_blank';
+            el.rel = 'noopener noreferrer';
+          }
           el.classList.add('ansi-link');
           applyColorClasses(el, part.hoverFg, true, true);
           applyColorClasses(el, part.hoverBg, true, false);
@@ -627,7 +694,34 @@ const baseJS = `  const palette = [
     }
   };
 
+  const setupCRT = () => {
+    const toggle = document.getElementById('crt-toggle');
+    const overlay = document.getElementById('crt-overlay');
+    if (!toggle || !overlay) return;
+    let enabled = false;
+    try { enabled = localStorage.getItem('crt-enabled') === 'true'; } catch (e) {}
+
+    const applyCRT = (on) => {
+      if (on) {
+        overlay.classList.add('active');
+        document.body.classList.add('crt-active');
+      } else {
+        overlay.classList.remove('active');
+        document.body.classList.remove('crt-active');
+      }
+      toggle.checked = on;
+    };
+
+    applyCRT(enabled);
+    toggle.addEventListener('change', () => {
+      const on = toggle.checked;
+      try { localStorage.setItem('crt-enabled', on ? 'true' : 'false'); } catch (e) {}
+      applyCRT(on);
+    });
+  };
+
   setupControls();
+  setupCRT();
   render();`
 
 func buildStandardCSS() string {
